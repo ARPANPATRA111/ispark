@@ -56,9 +56,8 @@
 			<a href="/" onclick={closeMenu} class="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-gold focus-visible:ring-offset-2 rounded-lg transition-all duration-200">
 				<div class="flex flex-col justify-center">
 					<div class="flex items-baseline text-2xl font-bold tracking-tight text-primary-dark font-sans leading-none">
-						<span class="text-slate-900">i</span><span class="text-[#881B1B]">SPARC</span>
+						<span class="text-slate-900">i</span><span class="text-acad-red">SPARC</span>
 					</div>
-					<span class="text-[9px] font-bold text-slate-500 tracking-widest mt-1 uppercase font-sans">IIPS DAVV CELL</span>
 				</div>
 			</a>
 
