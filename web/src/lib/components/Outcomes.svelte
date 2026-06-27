@@ -1,4 +1,5 @@
 <script lang="ts">
+	// Point Allocation Rules list
 	const rules = [
 		{
 			title: 'National / State Representation',

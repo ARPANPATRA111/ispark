@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fade, slide } from 'svelte/transition';
+  import { goto } from '$app/navigation';
 
   const formId = "student-login";
 
@@ -51,6 +52,9 @@
     setTimeout(() => {
       submitting = false;
       loginSuccess = true;
+      setTimeout(() => {
+        goto('/portal');
+      }, 1500);
     }, 1500);
   }
 </script>
@@ -146,7 +150,7 @@
         </div>
 
         <div class="flex gap-3 w-full max-w-sm pt-4">
-          <a href="/" class="flex-1 py-3 text-center bg-inst-navy hover:bg-inst-navy/90 text-white font-semibold text-xs tracking-wider uppercase rounded-xl transition duration-200">
+          <a href="/portal" class="flex-1 py-3 text-center bg-inst-navy hover:bg-inst-navy/90 text-white font-semibold text-xs tracking-wider uppercase rounded-xl transition duration-200">
             Go to Dashboard
           </a>
         </div>
@@ -178,7 +182,7 @@
           <div class="relative flex items-center">
             <span class="absolute left-3.5 pointer-events-none text-slate-400">
               <!-- Envelope SVG -->
-              <svg xmlns="http://www.w3.org/2000/svg" style="margin-left: 10px", fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-4 h-4">
+              <svg xmlns="http://www.w3.org/2000/svg" style="margin-left: 10px" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-4 h-4">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
               </svg>
             </span>
@@ -202,7 +206,7 @@
           <div class="relative flex items-center">
             <span class="absolute left-3.5 pointer-events-none text-slate-400">
               <!-- Lock SVG -->
-              <svg xmlns="http://www.w3.org/2000/svg" style="margin-left: 10px", fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-4 h-4">
+              <svg xmlns="http://www.w3.org/2000/svg" style="margin-left: 10px" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-4 h-4">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
               </svg>
             </span>
