@@ -21,7 +21,6 @@
 
 <section id="activities" class="py-16 sm:py-20 bg-[#F8F8F8] border-t border-slate-200">
 	<div class="max-w-7xl mx-auto px-6 lg:px-8">
-		
 		<!-- Section Header -->
 		<div class="pb-8 mb-12">
 			<span class="text-[10px] font-bold tracking-[0.2em] text-[#881B1B] uppercase font-sans">
@@ -31,7 +30,8 @@
 				Cell Foundation Pillars
 			</h2>
 			<p class="text-sm text-slate-500 font-sans max-w-2xl mt-3 leading-relaxed">
-				Through peer learning, campus representation, and social responsibility, we guide students to construct robust portfolios.
+				Through peer learning, campus representation, and social responsibility, we guide students
+				to construct robust portfolios.
 			</p>
 		</div>
 
@@ -54,6 +54,5 @@
 				</div>
 			{/each}
 		</div>
-
 	</div>
 </section>

@@ -1,39 +1,39 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-serif: 'Playfair Display', 'Merriweather', 'Georgia', serif;
-  --font-sans: 'Inter', sans-serif;
-  
-  --color-primary-dark: #111827;
-  --color-secondary-dark: #6B7280;
-  --color-accent-gold: #C89B3C;
-  --color-bg-warm: #F7F6F3;
-  --color-border-gray: #D8DDE5;
+	--font-serif: 'Playfair Display', 'Merriweather', 'Georgia', serif;
+	--font-sans: 'Inter', sans-serif;
 
-  /* Custom iSPARC Palette */
-  --color-inst-navy: #0B1535;
-  --color-acad-red: #A52A2A;
-  --color-accent-red: #881B1B;
-  --color-bg-main: #F7F6F3;
-  --color-bg-card: #FFFFFF;
-  
-  --color-text-primary: #111827;
-  --color-text-secondary: #6B7280;
-  
-  --color-border-base: #D8DDE5;
-  
-  /* Status Colors */
-  --color-status-approved: #16A34A;
-  --color-status-pending: #D97706;
-  --color-status-rejected: #DC2626;
-  --color-status-info: #2563EB;
+	--color-primary-dark: #111827;
+	--color-secondary-dark: #6b7280;
+	--color-accent-gold: #c89b3c;
+	--color-bg-warm: #f7f6f3;
+	--color-border-gray: #d8dde5;
+
+	/* Custom iSPARC Palette */
+	--color-inst-navy: #0b1535;
+	--color-acad-red: #a52a2a;
+	--color-accent-red: #881b1b;
+	--color-bg-main: #f7f6f3;
+	--color-bg-card: #ffffff;
+
+	--color-text-primary: #111827;
+	--color-text-secondary: #6b7280;
+
+	--color-border-base: #d8dde5;
+
+	/* Status Colors */
+	--color-status-approved: #16a34a;
+	--color-status-pending: #d97706;
+	--color-status-rejected: #dc2626;
+	--color-status-info: #2563eb;
 }
 
-html, body {
-  background-color: var(--color-bg-warm);
-  color: var(--color-primary-dark);
-  font-family: var(--font-sans);
-  margin: 0;
-  padding: 0;
+html,
+body {
+	background-color: var(--color-bg-warm);
+	color: var(--color-primary-dark);
+	font-family: var(--font-sans);
+	margin: 0;
+	padding: 0;
 }
-

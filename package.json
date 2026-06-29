@@ -1,0 +1,11 @@
+{
+	"name": "isparc-monorepo",
+	"private": true,
+	"description": "Root tooling for the iSPARC monorepo (web + api). Hosts git pre-commit hooks only.",
+	"scripts": {
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"husky": "^9.1.7"
+	}
+}

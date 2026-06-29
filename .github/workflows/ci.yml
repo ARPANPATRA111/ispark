@@ -1,0 +1,94 @@
+name: CI
+
+# Quality gates for every PR into main. Each stack only runs when its files
+# are present, so a frontend-only PR never spins up Go checks and vice-versa.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect changed stacks
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.f.outputs.frontend }}
+      backend: ${{ steps.f.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        run: |
+          if [ -f web/package.json ]; then echo "frontend=true" >> "$GITHUB_OUTPUT"; else echo "frontend=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f api/go.mod ]; then echo "backend=true" >> "$GITHUB_OUTPUT"; else echo "backend=false" >> "$GITHUB_OUTPUT"; fi
+
+  frontend:
+    name: Frontend (SvelteKit)
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint & format check (ESLint + Prettier)
+        run: npm run lint
+      - name: Svelte / TypeScript validation
+        run: npm run check
+      - name: Production build
+        run: npm run build
+
+  backend:
+    name: Backend (Go)
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - name: Formatting (gofmt)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - name: Vet
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: api
+      - name: Build
+        run: go build ./...
+      - name: Test (race detector)
+        run: go test -race ./...
+
+  meta:
+    name: Repo validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose syntax
+        run: docker compose -f docker-compose.yml config -q

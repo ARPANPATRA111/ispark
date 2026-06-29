@@ -36,7 +36,6 @@
 
 <section class="py-16 sm:py-20 bg-bg-warm border-t border-border-gray">
 	<div class="max-w-7xl mx-auto px-6 lg:px-8">
-		
 		<!-- Section Header -->
 		<div class="pb-8 mb-12">
 			<span class="text-[10px] font-bold tracking-[0.2em] text-accent-red uppercase font-sans">
@@ -46,22 +45,27 @@
 				The Student Event Journey
 			</h2>
 			<p class="text-sm text-secondary-dark font-sans max-w-2xl mt-3 leading-relaxed">
-				We enforce a structured advancement pipeline to ensure quality and accountability. Below is the official progression timeline for cell members.
+				We enforce a structured advancement pipeline to ensure quality and accountability. Below is
+				the official progression timeline for cell members.
 			</p>
 		</div>
 
 		<!-- Timeline Container -->
 		<div class="relative">
 			<!-- Timeline path line (Desktop) -->
-			<div class="hidden lg:block absolute top-[22px] left-0 right-0 h-0.5 bg-border-gray -z-10"></div>
-			
+			<div
+				class="hidden lg:block absolute top-[22px] left-0 right-0 h-0.5 bg-border-gray -z-10"
+			></div>
+
 			<!-- Timeline Grid -->
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8 lg:gap-4">
-				{#each steps as step, i}
+				{#each steps as step}
 					<div class="relative flex flex-col items-start gap-3">
 						<!-- Timeline Connector Node -->
 						<div class="flex items-center justify-between w-full lg:w-auto">
-							<div class="w-11 h-11 bg-accent-red text-white font-bold text-sm flex items-center justify-center rounded-full shrink-0">
+							<div
+								class="w-11 h-11 bg-accent-red text-white font-bold text-sm flex items-center justify-center rounded-full shrink-0"
+							>
 								{step.phase}
 							</div>
 						</div>
@@ -79,6 +83,5 @@
 				{/each}
 			</div>
 		</div>
-
 	</div>
 </section>

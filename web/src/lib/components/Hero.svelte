@@ -13,28 +13,50 @@
 
 	// Grading matrix data for the right-hand panel
 	const grades = [
-		{ range: '60+ Points', grade: 'Grade O (Outstanding)', colorClass: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-		{ range: '45 - 59 Points', grade: 'Grade A (Excellent)', colorClass: 'bg-blue-50 text-blue-800 border-blue-200' },
-		{ range: '30 - 44 Points', grade: 'Grade B (Very Good)', colorClass: 'bg-amber-50 text-amber-850 border-amber-200' },
-		{ range: '15 - 29 Points', grade: 'Grade C (Good)', colorClass: 'bg-purple-50 text-purple-800 border-purple-200' },
-		{ range: 'Under 15 Points', grade: 'Grade D (Satisfactory)', colorClass: 'bg-slate-50 text-slate-800 border-slate-200' }
+		{
+			range: '60+ Points',
+			grade: 'Grade O (Outstanding)',
+			colorClass: 'bg-emerald-50 text-emerald-800 border-emerald-200'
+		},
+		{
+			range: '45 - 59 Points',
+			grade: 'Grade A (Excellent)',
+			colorClass: 'bg-blue-50 text-blue-800 border-blue-200'
+		},
+		{
+			range: '30 - 44 Points',
+			grade: 'Grade B (Very Good)',
+			colorClass: 'bg-amber-50 text-amber-850 border-amber-200'
+		},
+		{
+			range: '15 - 29 Points',
+			grade: 'Grade C (Good)',
+			colorClass: 'bg-purple-50 text-purple-800 border-purple-200'
+		},
+		{
+			range: 'Under 15 Points',
+			grade: 'Grade D (Satisfactory)',
+			colorClass: 'bg-slate-50 text-slate-800 border-slate-200'
+		}
 	];
 </script>
 
 <section class="relative py-16 sm:py-24 bg-white">
 	<div class="max-w-7xl mx-auto px-6 lg:px-8">
 		<div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
-			
 			<!-- Left Column: Headline and Context -->
 			<div class="lg:col-span-7 space-y-6">
-				
 				<!-- Academic Affiliation Badge -->
-				<div class="inline-flex items-center px-3 py-1 bg-[#284B63] rounded-sm text-[10px] font-bold tracking-widest uppercase text-white">
+				<div
+					class="inline-flex items-center px-3 py-1 bg-[#284B63] rounded-sm text-[10px] font-bold tracking-widest uppercase text-white"
+				>
 					{badgeText}
 				</div>
 
 				<!-- Main Institutional Headline -->
-				<h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-[#881B1B] font-serif tracking-tight leading-none">
+				<h1
+					class="text-4xl sm:text-5xl lg:text-6xl font-bold text-[#881B1B] font-serif tracking-tight leading-none"
+				>
 					{titleText}
 				</h1>
 
@@ -65,30 +87,33 @@
 						{secondaryCtaText}
 					</a>
 				</div>
-
 			</div>
 
 			<!-- Right Column: Activity Grading Matrix (Clean Grid Panel) -->
 			<div class="lg:col-span-5 bg-white border border-slate-200 p-6 rounded-sm">
-				<h2 class="text-lg font-bold font-serif text-[#1e3a5f] mb-3">
-					Activity Grading Matrix
-				</h2>
-				<p class="text-xs text-slate-500 font-sans leading-relaxed mb-6 border-b border-slate-100 pb-4">
-					Extracurricular points are mapped directly to grades in semester results under the DAVV guidelines.
+				<h2 class="text-lg font-bold font-serif text-[#1e3a5f] mb-3">Activity Grading Matrix</h2>
+				<p
+					class="text-xs text-slate-500 font-sans leading-relaxed mb-6 border-b border-slate-100 pb-4"
+				>
+					Extracurricular points are mapped directly to grades in semester results under the DAVV
+					guidelines.
 				</p>
-				
+
 				<div class="space-y-3.5">
 					{#each grades as item}
-						<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-b-0">
+						<div
+							class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-b-0"
+						>
 							<span class="text-sm font-semibold text-slate-700 font-sans">{item.range}</span>
-							<span class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold border {item.colorClass} tracking-wide font-sans">
+							<span
+								class="inline-flex items-center px-3 py-1 rounded-sm text-xs font-bold border {item.colorClass} tracking-wide font-sans"
+							>
 								{item.grade}
 							</span>
 						</div>
 					{/each}
 				</div>
 			</div>
-
 		</div>
 	</div>
 </section>
