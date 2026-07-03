@@ -27,4 +27,17 @@ func SetupRoutes(app *fiber.App) {
 	auth.Use(middleware.AuthRequired())
 	auth.Post("/logout", controllers.Logout)
 	auth.Get("/profile", controllers.GetProfile)
+
+	// Admin
+	api.Post("/admin/auth/login", controllers.AdminLogin)
+
+	admin := api.Group("/admin")
+
+	// Must be logged in AND have the "admin" role
+	admin.Use(middleware.AuthRequired())
+	admin.Use(middleware.RoleRequired("admin"))
+
+	// Admin capabilities
+	admin.Get("/students", controllers.GetAllStudents)
+	admin.Get("/students/:roll", controllers.GetStudentDetail)
 }
