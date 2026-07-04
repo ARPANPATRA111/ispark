@@ -2,9 +2,8 @@
 	import { fade, slide } from 'svelte/transition';
 	import ProfileSection from './ProfileSection.svelte';
 	import BrowseActivities from './BrowseActivities.svelte';
-  	import CreditsProgress from './CreditsProgress.svelte';
+	import CreditsProgress from './CreditsProgress.svelte';
 	import ExtracurricularMarksheet from './ExtracurricularMarksheet.svelte';
-
 
 	// Sidebar navigation items
 	const menuItems = [
@@ -1218,7 +1217,7 @@
 				<BrowseActivities />
 			{:else if currentTab === 'Credits & Progress'}
 				<CreditsProgress />
-      {:else if currentTab === 'Extracurricular Marksheet'}
+			{:else if currentTab === 'Extracurricular Marksheet'}
 				<ExtracurricularMarksheet />
 			{:else}
 				<!-- Placeholder for under construction pages -->
