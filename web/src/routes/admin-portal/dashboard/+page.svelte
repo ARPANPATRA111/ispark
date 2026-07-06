@@ -2,6 +2,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import AdminDashboardView from './AdminDashboardView.svelte';
 	import AdminPlaceholderView from './AdminPlaceholderView.svelte';
+	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
 
 	// Sidebar menu items list for Admin Portal
 	const menuItems = [
@@ -382,6 +383,8 @@
 		<main class="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto max-w-7xl mx-auto w-full">
 			{#if currentTab === 'Dashboard'}
 				<AdminDashboardView onTabChange={(tab) => (currentTab = tab)} />
+			{:else if currentTab === 'Student Management'}
+				<AdminStudentManagementView />
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}
