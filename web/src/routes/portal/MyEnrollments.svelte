@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { API_BASE_URL } from '$lib/config';
+
 	// Define props
 	let { onUploadCertificate }: { onUploadCertificate?: () => void } = $props();
 
@@ -41,169 +43,144 @@
 		time: string;
 	}
 
-	// 7 mock records exactly matching the screenshot
-	const registeredActivities: RegisteredActivity[] = [
-		{
-			name: 'National Hackathon 2026',
-			category: 'Technical',
-			enrollmentDate: '10 Jun 2026',
-			activityDate: '05 Jul 2026',
-			credits: 15,
-			status: 'Registered',
-			action: 'View Details'
-		},
-		{
-			name: 'Inter College Debate',
-			category: 'Public Speaking',
-			enrollmentDate: '05 Jun 2026',
-			activityDate: '20 Jun 2026',
-			credits: 10,
-			status: 'Completed',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Blood Donation Drive',
-			category: 'Social Service',
-			enrollmentDate: '15 May 2026',
-			activityDate: '25 May 2026',
-			credits: 5,
-			status: 'Pending Verification',
-			action: 'Upload Certificate'
-		},
-		{
-			name: 'Robotics Workshop',
-			category: 'Technical',
-			enrollmentDate: '02 Apr 2026',
-			activityDate: '18 Apr 2026',
-			credits: 12,
-			status: 'Verified',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Annual Cultural Fest',
-			category: 'Cultural',
-			enrollmentDate: '01 Apr 2026',
-			activityDate: '20 Mar 2026',
-			credits: 8,
-			status: 'Completed',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Research Presentation Contest',
-			category: 'Academic',
-			enrollmentDate: '15 Feb 2026',
-			activityDate: '10 Mar 2026',
-			credits: 12,
-			status: 'Verified',
-			action: 'View Certificate'
-		},
-		{
-			name: 'National Science Olympiad',
-			category: 'Technical',
-			enrollmentDate: '30 Jan 2026',
-			activityDate: '05 Feb 2026',
-			credits: 10,
-			status: 'Rejected',
-			action: 'View Details'
+	let token = localStorage.getItem('access_token') || '';
+	let registeredActivities = $state<RegisteredActivity[]>([]);
+	let upcomingActivities = $state<UpcomingActivity[]>([]);
+	let creditCategorySummaries = $state<CreditCategorySummary[]>([]);
+	let stats = $state({
+		activities_participated: 0,
+		certificates_uploaded: 0,
+		pending_certificates: 0,
+		approved_certificates: 0,
+		rejected_certificates: 0,
+		credits_earned: 0
+	});
+	let loading = $state(true);
+
+	function formatDate(dateStr: string) {
+		if (!dateStr) return '';
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		});
+	}
+
+	async function loadEnrollmentsData() {
+		try {
+			// Fetch enrollments
+			const enrollRes = await fetch(`${API_BASE_URL}/api/student/enrollments`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (enrollRes.ok) {
+				const data = await enrollRes.json();
+				registeredActivities = (data || []).map((e: any) => {
+					let action: 'View Details' | 'View Certificate' | 'Upload Certificate' = 'View Details';
+					if (e.status === 'Completed' || e.status === 'Enrolled') {
+						action = 'Upload Certificate';
+					}
+
+					return {
+						name: e.activity.name,
+						category: e.activity.category,
+						enrollmentDate: formatDate(e.created_at),
+						activityDate: formatDate(e.activity.activity_date),
+						credits: e.activity.credits,
+						status: e.status === 'Enrolled' ? 'Registered' : e.status, // Enrolled -> Registered
+						action: action
+					};
+				});
+
+				// Calculate upcoming activities from future activities enrolled
+				upcomingActivities = (data || []).filter((e: any) => new Date(e.activity.activity_date) > new Date())
+					.map((e: any) => {
+						const diffTime = Math.abs(new Date(e.activity.activity_date).getTime() - new Date().getTime());
+						const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+						return {
+							name: e.activity.name,
+							date: formatDate(e.activity.activity_date),
+							time: '10:00 AM',
+							venue: e.activity.venue || 'IIPS Venue',
+							credits: e.activity.credits,
+							daysLeft: `${diffDays}d left`
+						};
+					});
+			}
+
+			// Fetch Marksheet details to get dynamic credits per category
+			const marksheetRes = await fetch(`${API_BASE_URL}/api/student/marksheet`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (marksheetRes.ok) {
+				const data = await marksheetRes.json();
+				creditCategorySummaries = (data.credit_categories || []).map((cat: any) => {
+					let req = 40; // baseline
+					if (cat.category.toLowerCase().includes('technical')) req = 60;
+					else if (cat.category.toLowerCase().includes('social')) req = 30;
+					
+					return {
+						category: cat.category,
+						creditsEarned: cat.credits,
+						creditsRequired: req,
+						percentage: Math.min(Math.round((cat.credits / req) * 100), 100)
+					};
+				});
+			}
+
+			// Fetch stats
+			const statsRes = await fetch(`${API_BASE_URL}/api/student/dashboard/stats`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (statsRes.ok) {
+				stats = await statsRes.json();
+			}
+
+		} catch (err) {
+			console.error(err);
+		} finally {
+			loading = false;
 		}
-	];
+	}
 
-	// Upcoming activities
-	const upcomingActivities: UpcomingActivity[] = [
+	$effect(() => {
+		loadEnrollmentsData();
+	});
+
+	// Recent updates timeline data (mocked for UI context, but connected to stats)
+	const recentUpdates = $derived([
 		{
-			name: 'National Hackathon 2026',
-			date: '5 July 2026',
-			time: '10:00 AM',
-			venue: 'IIPS Auditorium',
-			credits: 15,
-			daysLeft: '12d left'
+			type: 'success' as const,
+			text: `${stats.activities_participated} total activities enrolled`,
+			time: 'Sync complete'
 		},
 		{
-			name: 'Innovation Challenge',
-			date: '12 July 2026',
-			time: '09:00 AM',
-			venue: 'Seminar Hall B',
-			credits: 10,
-			daysLeft: '19d left'
+			type: 'star' as const,
+			text: `${stats.credits_earned} total credits approved`,
+			time: 'Live update'
 		},
 		{
-			name: 'Technical Workshop Series',
-			date: '20 July 2026',
-			time: '11:00 AM',
-			venue: 'Computer Lab 3',
-			credits: 8,
-			daysLeft: '27d left'
-		},
-		{
-			name: 'Research Symposium',
-			date: '2 Aug 2026',
-			time: '10:30 AM',
-			venue: 'Conference Room',
-			credits: 12,
-			daysLeft: '40d left'
+			type: 'doc' as const,
+			text: `${stats.pending_certificates} certificates pending review`,
+			time: 'Pending audit'
 		}
-	];
+	]);
 
-	// Credit Summary category values
-	const creditCategorySummaries: CreditCategorySummary[] = [
-		{
-			category: 'Technical Activities',
-			creditsEarned: 48,
-			creditsRequired: 60,
-			percentage: 80
-		},
-		{
-			category: 'Public Speaking',
-			creditsEarned: 24,
-			creditsRequired: 40,
-			percentage: 60
-		},
-		{
-			category: 'Social Service',
-			creditsEarned: 18,
-			creditsRequired: 30,
-			percentage: 60
-		},
-		{
-			category: 'Sports',
-			creditsEarned: 12,
-			creditsRequired: 30,
-			percentage: 40
-		}
-	];
+	// Selection state: selected row index
+	let selectedActivityIndex = $state(0);
 
-	// Recent updates timeline data
-	const recentUpdates: RecentUpdate[] = [
-		{
-			type: 'success',
-			text: 'National Hackathon registration confirmed',
-			time: '2 days ago'
-		},
-		{
-			type: 'star',
-			text: '5 credits added for Robotics Workshop',
-			time: '5 days ago'
-		},
-		{
-			type: 'doc',
-			text: 'Certificate verified for Annual Fest',
-			time: '1 week ago'
-		},
-		{
-			type: 'db',
-			text: 'Enrolled in Innovation Challenge',
-			time: '2 weeks ago'
-		}
-	];
-
-	// Selection state: selected row index (default to index 1 "Inter College Debate" as shown in the screenshot)
-	let selectedActivityIndex = $state(1);
-
-	// Get selected activity details
-	let selectedActivity = $derived(registeredActivities[selectedActivityIndex]);
+	// Get selected activity details (safely guarded)
+	let selectedActivity = $derived(registeredActivities.length > 0 ? registeredActivities[selectedActivityIndex] : null);
 
 	// Generate tracking journey steps dynamically based on selected activity status
 	let journeySteps = $derived.by<JourneyStep[]>(() => {
+		if (!selectedActivity) return [];
 		const status = selectedActivity.status;
 		const baseSteps = [
 			{ label: 'Enrolled', subtext: 'Registered for the activity' },
@@ -216,52 +193,52 @@
 
 		if (status === 'Registered') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'current' },
-				{ ...baseSteps[2], status: 'pending' },
-				{ ...baseSteps[3], status: 'pending' },
-				{ ...baseSteps[4], status: 'pending' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'current' as const },
+				{ ...baseSteps[2], status: 'pending' as const },
+				{ ...baseSteps[3], status: 'pending' as const },
+				{ ...baseSteps[4], status: 'pending' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Completed') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'current' },
-				{ ...baseSteps[4], status: 'pending' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'current' as const },
+				{ ...baseSteps[4], status: 'pending' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Pending Verification') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
-				{ ...baseSteps[4], status: 'current' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
+				{ ...baseSteps[4], status: 'current' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Verified') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
-				{ ...baseSteps[4], status: 'completed' },
-				{ ...baseSteps[5], status: 'current' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
+				{ ...baseSteps[4], status: 'completed' as const },
+				{ ...baseSteps[5], status: 'current' as const }
 			];
 		} else if (status === 'Rejected') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
 				{
 					label: 'Verification Rejected',
 					subtext: 'Certificate rejected during audit',
 					status: 'current' as const
 				},
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		}
 
@@ -310,8 +287,8 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">12</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">{registeredActivities.length}</span>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Total Enrollments</span
 				>
 			</div>
@@ -340,8 +317,8 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">4</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">{upcomingActivities.length}</span>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Upcoming Activities</span
 				>
 			</div>
@@ -370,8 +347,8 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">6</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">{registeredActivities.filter(a => a.status === 'Completed' || a.status === 'Verified').length}</span>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Completed Activities</span
 				>
 			</div>
@@ -400,7 +377,7 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">2</span>
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">{stats.pending_certificates}</span>
 				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
 					>Pending Verification</span
 				>
@@ -552,6 +529,7 @@
 	</section>
 
 	<!-- ==================== 3. DOUBLE COLUMN LAYOUT ==================== -->
+	{#if selectedActivity}
 	<section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 		<!-- LEFT COLUMN (Journey Tracker & Upcoming list) -->
 		<div class="lg:col-span-8 space-y-6 flex flex-col">
@@ -880,4 +858,9 @@
 			</div>
 		</div>
 	</section>
+	{:else}
+	<div class="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-2xl mx-auto my-6 shadow-xs">
+		<p class="text-xs text-slate-500 font-bold font-sans">No enrolled activities to display tracking details.</p>
+	</div>
+	{/if}
 </div>
