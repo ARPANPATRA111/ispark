@@ -991,6 +991,103 @@
 						<span>Showing {recentLogs.length} of {recentLogs.length} recent system activities</span>
 					</div>
 				</section>
+			{:else if currentTab === 'User Management'}
+				<!-- User Management Title and Subtexts (Step 1) -->
+				<div class="space-y-2 select-none">
+					<h2 class="text-2xl font-bold font-serif text-[#0B1535]">User Management</h2>
+					<p class="text-xs text-slate-500 font-semibold leading-relaxed">
+						Manage users, roles, and mentor assignments across the iSPARC platform.
+					</p>
+					<p class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+						Academic Year 2025–29 &middot; Saturday, 27 June 2026
+					</p>
+				</div>
+
+				<!-- User Statistics Cards Grid (Step 2) -->
+				<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 select-none" aria-label="User metrics overview">
+					<!-- Card 1: Total Students -->
+					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+						<div class="flex items-center justify-between">
+							<span class="text-2xl font-bold font-serif text-slate-900">1,248</span>
+							<div class="p-2.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
+								<!-- Book open icon -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+								</svg>
+							</div>
+						</div>
+						<div class="mt-4">
+							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Students</h3>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+12 this semester</span>
+						</div>
+					</div>
+
+					<!-- Card 2: Total Mentors -->
+					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+						<div class="flex items-center justify-between">
+							<span class="text-2xl font-bold font-serif text-slate-900">87</span>
+							<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+								<!-- Users icon -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0110.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 017.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0010.089 15c-1.47 0-2.854.34-4.082.945M14.214 16.058a9.386 9.386 0 010 3.07" />
+								</svg>
+							</div>
+						</div>
+						<div class="mt-4">
+							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Mentors</h3>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+3 this month</span>
+						</div>
+					</div>
+
+					<!-- Card 3: Total Admins -->
+					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+						<div class="flex items-center justify-between">
+							<span class="text-2xl font-bold font-serif text-slate-900">6</span>
+							<div class="p-2.5 rounded-lg bg-red-50 text-red-650 border border-red-100">
+								<!-- Ribbon icon -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+								</svg>
+							</div>
+						</div>
+						<div class="mt-4">
+							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Admins</h3>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block">2 new this year</span>
+						</div>
+					</div>
+
+					<!-- Card 4: Active Users -->
+					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+						<div class="flex items-center justify-between">
+							<span class="text-2xl font-bold font-serif text-slate-900">1,187</span>
+							<div class="p-2.5 rounded-lg bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
+								<!-- Graph trending up icon -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 015.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+								</svg>
+							</div>
+						</div>
+						<div class="mt-4">
+							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Users</h3>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block">94.7% active rate</span>
+						</div>
+					</div>
+				</section>
+
+				<!-- Empty content structure for subsequent steps (Step 1) -->
+				<div class="p-8 border border-dashed border-slate-350 bg-white rounded-xl text-center space-y-4 select-none">
+					<div class="w-12 h-12 rounded-full bg-[#881B1B]/10 text-[#881B1B] flex items-center justify-center mx-auto">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0110.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 017.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0010.089 15c-1.47 0-2.854.34-4.082.945M14.214 16.058a9.386 9.386 0 010 3.07" />
+						</svg>
+					</div>
+					<div class="space-y-1">
+						<h3 class="font-bold text-slate-800 text-sm">User Management Table Pending</h3>
+						<p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed font-semibold">
+							User registry data lists, filter tags, assign roles interfaces, and detailed user search panels will be configured in subsequent steps.
+						</p>
+					</div>
+				</div>
 			{:else}
 				<!-- Under Construction placeholder for other tabs -->
 				<div
