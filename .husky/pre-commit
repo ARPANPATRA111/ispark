@@ -1,14 +1,24 @@
-# iSPARC monorepo pre-commit: format/lint staged files per stack.
+#!/usr/bin/env sh
+set -eu
 
-# Frontend: run lint-staged inside web/ so Prettier/ESLint resolve their
-# plugins from web/node_modules and only touch staged web files.
-if git diff --cached --name-only | grep -q '^web/'; then
-	(cd web && npx lint-staged) || exit 1
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+# Frontend: run lint-staged inside web/ so Prettier/ESLint resolve their plugins
+# from web/node_modules and only touch staged web files.
+if echo "$staged_files" | grep -q '^web/'; then
+	if [ ! -d web/node_modules ]; then
+		echo "web/node_modules is missing. Run 'cd web && npm install' before committing web changes."
+		exit 1
+	fi
+
+	(cd web && npx --no-install lint-staged)
 fi
 
 # Backend: gofmt staged Go files, then re-stage what changed.
-gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+gofiles="$(echo "$staged_files" | grep '\.go$' || true)"
 if [ -n "$gofiles" ]; then
-	gofmt -w $gofiles
-	echo "$gofiles" | xargs git add
+	echo "$gofiles" | while IFS= read -r file; do
+		gofmt -w "$file"
+		git add "$file"
+	done
 fi

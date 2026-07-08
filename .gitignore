@@ -77,7 +77,15 @@ web_modules/
 
 # IDEs and editors
 .idea/
-.vscode/
+.vscode/*
+!.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.vscode
+mks/
+mz/
+start-project.ps1
+
 *.suo
 *.ntvs*
 *.njsproj
