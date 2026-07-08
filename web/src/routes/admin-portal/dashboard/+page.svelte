@@ -3,6 +3,7 @@
 	import AdminDashboardView from './AdminDashboardView.svelte';
 	import AdminPlaceholderView from './AdminPlaceholderView.svelte';
 	import ActivityMonitoringView from './ActivityMonitoringView.svelte';
+	import BatchAnalyticsView from './BatchAnalyticsView.svelte';
 	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
 
 	// Sidebar menu items list for Admin Portal
@@ -394,10 +395,16 @@
 		<main class="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto max-w-7xl mx-auto w-full">
 			{#if currentTab === 'Dashboard'}
 				<AdminDashboardView onTabChange={(tab) => (currentTab = tab)} />
+
 			{:else if currentTab === 'Activity Monitoring'}
 				<ActivityMonitoringView />
+
 			{:else if currentTab === 'Student Management'}
 				<AdminStudentManagementView />
+
+			{:else if currentTab === 'Batch Analytics'}
+				<BatchAnalyticsView /> 
+
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}
