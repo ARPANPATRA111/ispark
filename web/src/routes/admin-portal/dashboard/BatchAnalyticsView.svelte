@@ -1,8 +1,4 @@
 <script lang="ts">
-	// Optional callback so quick-actions inside this view can switch tabs,
-	// same pattern as AdminDashboardView's onTabChange prop.
-	let { onTabChange = (tab: string) => {} }: { onTabChange?: (tab: string) => void } = $props();
-
 	// ---- Mock data (swap for real API calls) ----
 	const summary = {
 		assignedBatches: 3,
