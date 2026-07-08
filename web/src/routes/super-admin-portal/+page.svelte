@@ -102,6 +102,145 @@
 		}
 	]);
 
+	// Mock User Registry for User Management Portal (Step 3 & 4)
+	let userRegistry = $state([
+		{
+			name: 'Rahul Sharma',
+			id: 'ENG024001',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'Mtech CS',
+			status: 'Active',
+			avatarBg: 'bg-[#802D2D] text-white'
+		},
+		{
+			name: 'Dr. Priya Patel',
+			id: 'MNT024001',
+			role: 'Admin',
+			displayRole: 'Mentor',
+			dept: 'Mtech IT',
+			status: 'Active',
+			avatarBg: 'bg-[#C07050] text-white'
+		},
+		{
+			name: 'Arjun Desai',
+			id: 'ENG024032',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'MBA',
+			status: 'Pending',
+			avatarBg: 'bg-[#2A4D69] text-white'
+		},
+		{
+			name: 'Sneha Kumar',
+			id: 'ENG024075',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'MCA',
+			status: 'Active',
+			avatarBg: 'bg-[#7D4427] text-white'
+		},
+		{
+			name: 'Dr. Vikram Singh',
+			id: 'MNT024008',
+			role: 'Admin',
+			displayRole: 'Mentor',
+			dept: 'Mtech CS',
+			status: 'Active',
+			avatarBg: 'bg-[#3A6B88] text-white'
+		},
+		{
+			name: 'Kavya Krishnan',
+			id: 'ENG024099',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'Mtech IT',
+			status: 'Inactive',
+			avatarBg: 'bg-[#7A6B3A] text-white'
+		},
+		{
+			name: 'Admin Coordinator',
+			id: 'ADM024001',
+			role: 'Admin',
+			displayRole: 'Admin',
+			dept: 'MBA',
+			status: 'Active',
+			avatarBg: 'bg-[#244E3F] text-white'
+		},
+		{
+			name: 'Dev Mehta',
+			id: 'ENG024112',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'Mtech CS',
+			status: 'Active',
+			avatarBg: 'bg-[#B04A3A] text-white'
+		},
+		{
+			name: 'Dr. Anita Rao',
+			id: 'MNT024012',
+			role: 'Admin',
+			displayRole: 'Mentor',
+			dept: 'MCA',
+			status: 'Pending',
+			avatarBg: 'bg-[#4E6B4E] text-white'
+		},
+		{
+			name: 'Rohan Nair',
+			id: 'ENG024055',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'MBA',
+			status: 'Active',
+			avatarBg: 'bg-[#3C4A8E] text-white'
+		},
+		{
+			name: 'Meera Joshi',
+			id: 'ENG024143',
+			role: 'Student',
+			displayRole: 'Student',
+			dept: 'Mtech IT',
+			status: 'Active',
+			avatarBg: 'bg-[#A63A50] text-white'
+		},
+		{
+			name: 'Dr. Suresh Iyer',
+			id: 'MNT024019',
+			role: 'Admin',
+			displayRole: 'Mentor',
+			dept: 'MCA',
+			status: 'Active',
+			avatarBg: 'bg-[#6B5E33] text-white'
+		}
+	]);
+
+	let userFilter = $state('All');
+	let userSearch = $state('');
+
+	let filteredUsers = $derived(
+		userRegistry.filter((user) => {
+			const matchesFilter =
+				userFilter === 'All' ||
+				(userFilter === 'Student' && user.role === 'Student') ||
+				(userFilter === 'Mentor' && user.displayRole === 'Mentor') ||
+				(userFilter === 'Admin' && user.displayRole === 'Admin');
+
+			const matchesSearch =
+				user.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+				user.id.toLowerCase().includes(userSearch.toLowerCase()) ||
+				user.dept.toLowerCase().includes(userSearch.toLowerCase());
+
+			return matchesFilter && matchesSearch;
+		})
+	);
+
+	let totalStudentsCount = $derived(userRegistry.filter((u) => u.role === 'Student').length + 1236);
+	let totalMentorsCount = $derived(userRegistry.filter((u) => u.displayRole === 'Mentor').length + 83);
+	let totalAdminsCount = $derived(userRegistry.filter((u) => u.displayRole === 'Admin').length + 5);
+	let activeUsersCount = $derived(userRegistry.filter((u) => u.status === 'Active').length + 1179);
+	let pendingUsersCount = $derived(userRegistry.filter((u) => u.status === 'Pending').length + 46);
+	let inactiveUsersCount = $derived(userRegistry.filter((u) => u.status === 'Inactive').length + 105);
+
 	// Mock Recent System Activities (Step 5)
 	let recentLogs = $state([
 		{
@@ -195,6 +334,43 @@
 			},
 			...recentUsers
 		];
+		
+		const initials = newUserName
+			.split(' ')
+			.map((n) => n[0])
+			.join('')
+			.toUpperCase()
+			.slice(0, 2);
+		
+		const avatarColors = [
+			'bg-[#802D2D] text-white',
+			'bg-[#C07050] text-white',
+			'bg-[#2A4D69] text-white',
+			'bg-[#7D4427] text-white',
+			'bg-[#3A6B88] text-white',
+			'bg-[#7A6B3A] text-white',
+			'bg-[#244E3F] text-white',
+			'bg-[#B04A3A] text-white',
+			'bg-[#4E6B4E] text-white',
+			'bg-[#3C4A8E] text-white',
+			'bg-[#A63A50] text-white',
+			'bg-[#6B5E33] text-white'
+		];
+		const randomColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+
+		userRegistry = [
+			{
+				name: newUserName,
+				id: generatedId,
+				role: newUserRole,
+				displayRole: newUserRole === 'Admin' ? 'Admin' : newUserRole,
+				dept: newUserDept || 'Computer Science',
+				status: 'Active',
+				avatarBg: randomColor
+			},
+			...userRegistry
+		];
+
 		recentLogs = [
 			{
 				activity: `New ${newUserRole.toLowerCase()} account created for ${newUserName}`,
@@ -992,23 +1168,12 @@
 					</div>
 				</section>
 			{:else if currentTab === 'User Management'}
-				<!-- User Management Title and Subtexts (Step 1) -->
-				<div class="space-y-2 select-none">
-					<h2 class="text-2xl font-bold font-serif text-[#0B1535]">User Management</h2>
-					<p class="text-xs text-slate-500 font-semibold leading-relaxed">
-						Manage users, roles, and mentor assignments across the iSPARC platform.
-					</p>
-					<p class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-						Academic Year 2025–29 &middot; Saturday, 27 June 2026
-					</p>
-				</div>
-
 				<!-- User Statistics Cards Grid (Step 2) -->
 				<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 select-none" aria-label="User metrics overview">
 					<!-- Card 1: Total Students -->
 					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">1,248</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{totalStudentsCount}</span>
 							<div class="p-2.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
 								<!-- Book open icon -->
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -1025,7 +1190,7 @@
 					<!-- Card 2: Total Mentors -->
 					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">87</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{totalMentorsCount}</span>
 							<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
 								<!-- Users icon -->
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -1042,8 +1207,8 @@
 					<!-- Card 3: Total Admins -->
 					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">6</span>
-							<div class="p-2.5 rounded-lg bg-red-50 text-red-650 border border-red-100">
+							<span class="text-2xl font-bold font-serif text-slate-900">{totalAdminsCount}</span>
+							<div class="p-2.5 rounded-lg bg-red-50 text-red-655 border border-red-100">
 								<!-- Ribbon icon -->
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
@@ -1059,7 +1224,7 @@
 					<!-- Card 4: Active Users -->
 					<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">1,187</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{activeUsersCount}</span>
 							<div class="p-2.5 rounded-lg bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
 								<!-- Graph trending up icon -->
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -1074,18 +1239,268 @@
 					</div>
 				</section>
 
-				<!-- Empty content structure for subsequent steps (Step 1) -->
-				<div class="p-8 border border-dashed border-slate-350 bg-white rounded-xl text-center space-y-4 select-none">
-					<div class="w-12 h-12 rounded-full bg-[#881B1B]/10 text-[#881B1B] flex items-center justify-center mx-auto">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0110.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 017.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0010.089 15c-1.47 0-2.854.34-4.082.945M14.214 16.058a9.386 9.386 0 010 3.07" />
-						</svg>
+				<!-- Main 2-Column Grid (Step 3 & 4 Layout) -->
+				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+					<!-- Left Column: User Management Table (lg:col-span-2) -->
+					<div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+						<!-- Table Header -->
+						<div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/20 select-none">
+							<h3 class="text-sm font-bold font-serif text-slate-905">User Management Overview</h3>
+							<button
+								type="button"
+								onclick={() => { userFilter = 'All'; userSearch = ''; }}
+								class="text-[#881B1B] hover:underline text-xs font-bold uppercase tracking-wider"
+							>
+								View All
+							</button>
+						</div>
+
+						<!-- Table Filters & Search Controls -->
+						<div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white select-none">
+							<!-- Filter Tabs -->
+							<div class="flex flex-wrap gap-1.5">
+								{#each ['All', 'Student', 'Mentor', 'Admin'] as roleType}
+									<button
+										type="button"
+										onclick={() => (userFilter = roleType)}
+										class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all
+											{userFilter === roleType
+												? 'bg-[#C23A3A] text-white shadow-xs'
+												: 'bg-slate-50 text-slate-500 hover:bg-slate-100'}"
+									>
+										{roleType === 'All' ? 'All Users' : roleType === 'Student' ? 'Students' : roleType === 'Mentor' ? 'Mentors' : 'Admins'}
+									</button>
+								{/each}
+							</div>
+
+							<!-- Search Bar -->
+							<div class="relative w-full sm:w-64">
+								<input
+									type="text"
+									bind:value={userSearch}
+									placeholder="Search by name, roll no., or email..."
+									class="pl-4 pr-9 py-2 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-slate-350 focus:bg-white w-full transition-all"
+								/>
+								<span class="absolute right-3 top-2.5 text-slate-400">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+									</svg>
+								</span>
+							</div>
+						</div>
+
+						<!-- Table Grid -->
+						<div class="overflow-x-auto">
+							<table class="w-full text-left border-collapse">
+								<thead>
+									<tr class="border-b border-slate-150 bg-slate-50/50 text-[10px] font-extrabold text-slate-405 uppercase tracking-wider select-none">
+										<th class="py-3.5 px-5">User Name</th>
+										<th class="py-3.5 px-5">Role</th>
+										<th class="py-3.5 px-5">Department</th>
+										<th class="py-3.5 px-5">Status</th>
+										<th class="py-3.5 px-5 text-right sm:text-left">Actions</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-slate-100 text-xs font-sans">
+									{#if filteredUsers.length === 0}
+										<tr>
+											<td colspan="5" class="py-8 text-center text-slate-400 font-semibold select-none">
+												No users found matching search filters.
+											</td>
+										</tr>
+									{:else}
+										{#each filteredUsers as user}
+											<tr class="hover:bg-slate-50/30 transition-colors">
+												<!-- User Info (Initials Avatar + Name & ID) -->
+												<td class="py-4 px-5">
+													<div class="flex items-center gap-3">
+														<div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 select-none {user.avatarBg}">
+															{user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+														</div>
+														<div class="flex flex-col">
+															<span class="font-bold text-slate-800">{user.name}</span>
+															<span class="text-[9px] text-slate-400 font-semibold mt-0.5 select-all">{user.id}</span>
+														</div>
+													</div>
+												</td>
+
+												<!-- Role Badge -->
+												<td class="py-4 px-5 select-none">
+													<span class="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase rounded-full border
+														{user.displayRole === 'Student'
+															? 'bg-blue-50 text-blue-700 border-blue-100'
+															: user.displayRole === 'Mentor'
+																? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+																: 'bg-rose-50 text-rose-700 border-rose-100'}"
+													>
+														{user.displayRole}
+													</span>
+												</td>
+
+												<!-- Department -->
+												<td class="py-4 px-5 text-slate-500 font-semibold">{user.dept}</td>
+
+												<!-- Status Dot -->
+												<td class="py-4 px-5 select-none">
+													<span class="inline-flex items-center gap-1.5 font-bold
+														{user.status === 'Active' ? 'text-emerald-600' : user.status === 'Pending' ? 'text-amber-600' : 'text-slate-400'}"
+													>
+														<span class="w-1.5 h-1.5 rounded-full shrink-0
+															{user.status === 'Active' ? 'bg-emerald-600' : user.status === 'Pending' ? 'bg-amber-500 animate-pulse' : 'bg-slate-400'}"
+														></span>
+														{user.status}
+													</span>
+												</td>
+
+												<!-- Action Buttons -->
+												<td class="py-4 px-5">
+													<div class="flex items-center gap-3 text-slate-400">
+														<button
+															type="button"
+															onclick={() => triggerToast(`Viewing stats for ${user.name}...`)}
+															aria-label="View user profile"
+															class="hover:text-[#881B1B] transition-colors p-0.5"
+														>
+															<!-- Eye icon -->
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+																<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+															</svg>
+														</button>
+														<button
+															type="button"
+															onclick={() => triggerToast(`Edit functionality for ${user.name} is coming soon.`)}
+															aria-label="Edit user details"
+															class="hover:text-blue-600 transition-colors p-0.5"
+														>
+															<!-- Pencil edit icon -->
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+															</svg>
+														</button>
+														<button
+															type="button"
+															onclick={() => {
+																if (confirm(`Are you sure you want to delete ${user.name}?`)) {
+																	userRegistry = userRegistry.filter(u => u.id !== user.id);
+																	triggerToast(`User "${user.name}" removed successfully.`);
+																}
+															}}
+															aria-label="Delete user"
+															class="hover:text-red-650 transition-colors p-0.5"
+														>
+															<!-- Trash delete icon -->
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+															</svg>
+														</button>
+													</div>
+												</td>
+											</tr>
+										{/each}
+									{/if}
+								</tbody>
+							</table>
+						</div>
+
+						<!-- Table Footer Summary -->
+						<div class="p-4 border-t border-slate-100 bg-slate-50/30 text-slate-500 font-semibold text-[11px] select-none">
+							<span>Showing {filteredUsers.length} of {userRegistry.length} users</span>
+						</div>
 					</div>
-					<div class="space-y-1">
-						<h3 class="font-bold text-slate-800 text-sm">User Management Table Pending</h3>
-						<p class="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed font-semibold">
-							User registry data lists, filter tags, assign roles interfaces, and detailed user search panels will be configured in subsequent steps.
-						</p>
+
+					<!-- Right Column Sidebar Panels (Step 4 Cards) -->
+					<div class="space-y-6">
+						<!-- Quick Actions Card -->
+						<div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+							<h3 class="text-sm font-bold font-serif text-slate-905">Quick Actions</h3>
+							<div class="h-px bg-slate-100 my-2"></div>
+							
+							<div class="grid grid-cols-2 gap-4 select-none">
+								<!-- Button 1: Add User (Solid Red) -->
+								<button
+									type="button"
+									onclick={() => (isCreateUserModalOpen = true)}
+									class="p-4 bg-[#C23A3A] hover:bg-[#B03131] text-white rounded-2xl shadow-xs flex flex-col items-center justify-center text-center space-y-2 h-[100px] w-full transition duration-200 focus:outline-none"
+								>
+									<!-- User plus icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-white">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235A8.902 8.902 0 0110 18a8.902 8.902 0 016 1.235c.19.115.3.322.3.54v.725c0 .19-.153.344-.344.344H4.344A.344.344 0 014 20.5v-.725c0-.218.11-.425.3-.54z" />
+									</svg>
+									<span class="font-extrabold text-[11px] block font-sans">Add User</span>
+								</button>
+
+								<!-- Button 2: Assign Mentor -->
+								<button
+									type="button"
+									onclick={() => triggerToast('Assign Mentor flow coming soon...')}
+									class="p-4 bg-[#F5F2F0] hover:bg-[#EAE5DF] text-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 h-[100px] w-full transition duration-200 focus:outline-none"
+								>
+									<!-- Link icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-[#C23A3A]">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+									</svg>
+									<span class="font-extrabold text-[11px] block font-sans text-slate-805">Assign Mentor</span>
+								</button>
+
+								<!-- Button 3: Assign Role -->
+								<button
+									type="button"
+									onclick={() => triggerToast('Assign Role flow coming soon...')}
+									class="p-4 bg-[#F5F2F0] hover:bg-[#EAE5DF] text-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 h-[100px] w-full transition duration-200 focus:outline-none"
+								>
+									<!-- Shield / user cog icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-[#C23A3A]">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+									</svg>
+									<span class="font-extrabold text-[11px] block font-sans text-slate-805">Assign Role</span>
+								</button>
+
+								<!-- Button 4: User Stats -->
+								<button
+									type="button"
+									onclick={() => triggerToast('User statistics view selected.')}
+									class="p-4 bg-[#F5F2F0] hover:bg-[#EAE5DF] text-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 h-[100px] w-full transition duration-200 focus:outline-none"
+								>
+									<!-- Speedometer / chart icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-[#C23A3A]">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
+									</svg>
+									<span class="font-extrabold text-[11px] block font-sans text-slate-805">User Stats</span>
+								</button>
+							</div>
+						</div>
+
+						<!-- Account Status Summary Card -->
+						<div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4 select-none">
+							<h3 class="text-sm font-bold font-serif text-slate-905">Account Status</h3>
+							<div class="h-px bg-slate-100 my-2"></div>
+							
+							<div class="space-y-3 font-sans text-xs">
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-2 font-semibold text-slate-600">
+										<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+										Active
+									</div>
+									<span class="font-extrabold text-slate-800">{activeUsersCount}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-2 font-semibold text-slate-600">
+										<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+										Pending
+									</div>
+									<span class="font-extrabold text-[#C06014]">{pendingUsersCount}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-2 font-semibold text-slate-600">
+										<span class="w-2 h-2 rounded-full bg-slate-400"></span>
+										Inactive
+									</div>
+									<span class="font-extrabold text-slate-400">{inactiveUsersCount}</span>
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
 			{:else}
