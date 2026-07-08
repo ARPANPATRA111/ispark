@@ -395,16 +395,12 @@
 		<main class="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto max-w-7xl mx-auto w-full">
 			{#if currentTab === 'Dashboard'}
 				<AdminDashboardView onTabChange={(tab) => (currentTab = tab)} />
-
 			{:else if currentTab === 'Activity Monitoring'}
 				<ActivityMonitoringView />
-
 			{:else if currentTab === 'Student Management'}
 				<AdminStudentManagementView />
-
 			{:else if currentTab === 'Batch Analytics'}
-				<BatchAnalyticsView /> 
-
+				<BatchAnalyticsView />
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}
