@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fade, slide } from 'svelte/transition';
+	import { slide } from 'svelte/transition';
 
 	// ── Types ──────────────────────────────────────────────────────────────────
 	type CertStatus = 'Pending' | 'Approved' | 'Rejected';
@@ -442,15 +442,6 @@
 			<span>{toast.message}</span>
 		</div>
 	{/each}
-</div>
-
-<!-- ── Page Header ─────────────────────────────────────────────────────────── -->
-<div class="flex flex-col gap-1" transition:fade={{ duration: 150 }}>
-	<h1 class="text-2xl font-bold font-serif text-slate-900">Certificate Verification</h1>
-	<p class="text-xs text-slate-400 font-semibold tracking-wide">
-		Review and verify certificates submitted by assigned students for extracurricular credit
-		approval.
-	</p>
 </div>
 
 <!-- ── Stat Cards ──────────────────────────────────────────────────────────── -->
