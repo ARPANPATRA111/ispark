@@ -6,6 +6,7 @@
 	import AdminPlaceholderView from './AdminPlaceholderView.svelte';
 	import ActivityMonitoringView from './ActivityMonitoringView.svelte';
 	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
+	import AdminCertificateVerificationView from './AdminCertificateVerificationView.svelte';
 
 	onMount(() => {
 		const token = localStorage.getItem('admin_token');
@@ -411,6 +412,8 @@
 				<ActivityMonitoringView />
 			{:else if currentTab === 'Student Management'}
 				<AdminStudentManagementView />
+			{:else if currentTab === 'Certificate Verification'}
+				<AdminCertificateVerificationView />
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}
