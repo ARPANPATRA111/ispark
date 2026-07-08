@@ -5,6 +5,7 @@
 	import ActivityMonitoringView from './ActivityMonitoringView.svelte';
 	import BatchAnalyticsView from './BatchAnalyticsView.svelte';
 	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
+	import AdminCertificateVerificationView from './AdminCertificateVerificationView.svelte';
 
 	// Sidebar menu items list for Admin Portal
 	const menuItems = [
@@ -399,6 +400,8 @@
 				<ActivityMonitoringView />
 			{:else if currentTab === 'Student Management'}
 				<AdminStudentManagementView />
+			{:else if currentTab === 'Certificate Verification'}
+				<AdminCertificateVerificationView />
 			{:else if currentTab === 'Batch Analytics'}
 				<BatchAnalyticsView />
 			{:else}
