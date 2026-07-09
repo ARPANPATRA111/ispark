@@ -1,7 +1,12 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import HeaderSection from '../HeaderSection.svelte';
 	import UpdatePasswordSection from './UpdatePasswordSection.svelte';
 	import FooterSection from '../FooterSection.svelte';
+
+	let mode: 'voluntary' | 'forced' = $derived(
+		page.url.searchParams.get('mode') === 'voluntary' ? 'voluntary' : 'forced'
+	);
 </script>
 
 <svelte:head>
@@ -16,7 +21,7 @@
 <div class="min-h-screen bg-bg-main flex flex-col items-center w-full">
 	<HeaderSection />
 	<main class="flex-grow w-full flex justify-center items-start py-12">
-		<UpdatePasswordSection />
+		<UpdatePasswordSection {mode} />
 	</main>
 	<FooterSection />
 </div>

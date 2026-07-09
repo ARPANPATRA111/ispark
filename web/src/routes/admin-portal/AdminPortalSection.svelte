@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { onDestroy } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
-	import { goto } from '$app/navigation';
+
+	import { API_BASE_URL } from '$lib/config';
 
 	const formId = 'admin-login';
 
@@ -68,32 +70,59 @@
 		}
 	];
 
+	// Check if admin password is updated or not.
+	function routeAfterLogin(data: { must_change_password?: boolean }) {
+		loginSuccess = true;
+
+		// Persist the flag so the dashboard can guard itself against direct URL access
+		localStorage.setItem('admin_must_change_password', String(!!data.must_change_password));
+
+		setTimeout(() => {
+			if (data.must_change_password) {
+				goto('/admin-portal/update');
+			} else {
+				goto('/admin-portal/dashboard');
+			}
+		}, 1000);
+	}
+
 	// Submit Handler
-	function handleSubmit(event: SubmitEvent) {
+	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		if (!isFormValid || lockoutTimeLeft > 0) return;
 
 		submitting = true;
 		errorMsg = '';
 
-		// Simulate administrative login (correct credentials: admin / admin123)
-		setTimeout(() => {
-			submitting = false;
-			if (adminId === 'admin' && password === 'admin123') {
-				loginSuccess = true;
-				failedAttempts = 0;
-				setTimeout(() => {
-					goto('/admin-portal/dashboard');
-				}, 1500);
-			} else {
-				failedAttempts += 1;
-				if (failedAttempts >= 5) {
-					startLockout();
-				} else {
-					errorMsg = `Invalid Administrator ID or Password. (Attempt ${failedAttempts} of 5)`;
-				}
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ admin_id: adminId, password: password })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Invalid Administrator ID or Password.');
 			}
-		}, 1500);
+
+			localStorage.setItem('admin_token', data.access_token);
+			failedAttempts = 0;
+			routeAfterLogin(data);
+		} catch (err) {
+			failedAttempts += 1;
+			if (failedAttempts >= 5) {
+				startLockout();
+			} else {
+				errorMsg =
+					err instanceof Error
+						? err.message
+						: `Invalid Administrator ID or Password. (Attempt ${failedAttempts} of 5)`;
+			}
+		} finally {
+			submitting = false;
+		}
 	}
 </script>
 

@@ -1,11 +1,14 @@
 {
-	"name": "isparc-monorepo",
-	"private": true,
-	"description": "Root tooling for the iSPARC monorepo (web + api). Hosts git pre-commit hooks only.",
-	"scripts": {
-		"prepare": "husky"
-	},
-	"devDependencies": {
-		"husky": "^9.1.7"
-	}
+  "name": "isparc-monorepo",
+  "private": true,
+  "description": "Root tooling for the iSPARC monorepo (web + api). Hosts git pre-commit hooks only.",
+  "scripts": {
+    "prepare": "husky",
+    "hooks:install": "husky",
+    "lint-staged": "lint-staged"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10"
+  }
 }

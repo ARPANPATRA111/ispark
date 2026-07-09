@@ -23,6 +23,9 @@ func main() {
 	// Initialize Database
 	config.ConnectDB()
 
+	// Used to check admin login via seeding dummy data
+	config.SeedDefaultAdmin()
+
 	// Initialize Fiber App
 	app := fiber.New(fiber.Config{
 		AppName: "iSpark Authentication API",

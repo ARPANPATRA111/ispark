@@ -1,7 +1,24 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
 	import AdminDashboardView from './AdminDashboardView.svelte';
 	import AdminPlaceholderView from './AdminPlaceholderView.svelte';
+	import ActivityMonitoringView from './ActivityMonitoringView.svelte';
+	import BatchAnalyticsView from './BatchAnalyticsView.svelte';
+	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
+	import AdminCertificateVerificationView from './AdminCertificateVerificationView.svelte';
+
+	onMount(() => {
+		const token = localStorage.getItem('admin_token');
+		if (!token) {
+			goto('/admin-portal');
+			return;
+		}
+		if (localStorage.getItem('admin_must_change_password') === 'true') {
+			goto('/admin-portal/update');
+		}
+	});
 
 	// Sidebar menu items list for Admin Portal
 	const menuItems = [
@@ -83,11 +100,16 @@
 	>
 		<!-- Logo area -->
 		<div class="h-[72px] flex items-center px-6 gap-3.5 border-b border-slate-100">
+			<div
+				class="w-9 h-9 bg-[#881B1B] rounded-lg flex items-center justify-center text-white font-bold font-serif text-sm shrink-0"
+			>
+				A
+			</div>
 			<div class="flex flex-col">
 				<span class="text-xl font-bold tracking-tight text-slate-900 font-serif"
 					>i<span class="text-[#881B1B]">SPARC</span></span
 				>
-				<span class="text-[9px] font-bold text-slate-400 tracking-wider uppercase -mt-1"
+				<span class="text-[9px] font-bold text-slate-600 tracking-wider uppercase -mt-1"
 					>IIPS DAVV CELL</span
 				>
 			</div>
@@ -101,7 +123,7 @@
 					class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 					item.name
 						? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
-						: 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}"
+						: 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -122,7 +144,7 @@
 		<div class="p-4 border-t border-slate-100">
 			<button
 				onclick={handleLogout}
-				class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+				class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -161,11 +183,16 @@
 		>
 			<div class="h-[72px] flex items-center justify-between px-6 border-b border-slate-100">
 				<div class="flex items-center gap-3">
+					<div
+						class="w-9 h-9 bg-[#881B1B] rounded-lg flex items-center justify-center text-white font-bold font-serif text-sm shrink-0"
+					>
+						A
+					</div>
 					<div class="flex flex-col">
 						<span class="text-xl font-bold tracking-tight text-slate-900 font-serif"
 							>i<span class="text-[#881B1B]">SPARC</span></span
 						>
-						<span class="text-[9px] font-bold text-slate-400 tracking-wider uppercase -mt-1"
+						<span class="text-[9px] font-bold text-slate-600 tracking-wider uppercase -mt-1"
 							>IIPS DAVV CELL</span
 						>
 					</div>
@@ -198,7 +225,7 @@
 						class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 						item.name
 							? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
-							: 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}"
+							: 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -221,7 +248,7 @@
 						handleLogout();
 						toggleMobileSidebar();
 					}}
-					class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+					class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -274,7 +301,7 @@
 					<p
 						class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5"
 					>
-						Saturday, 27 June 2026
+						Tuesday, 23 June 2026
 					</p>
 				</div>
 			</div>
@@ -382,6 +409,14 @@
 		<main class="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto max-w-7xl mx-auto w-full">
 			{#if currentTab === 'Dashboard'}
 				<AdminDashboardView onTabChange={(tab) => (currentTab = tab)} />
+			{:else if currentTab === 'Activity Monitoring'}
+				<ActivityMonitoringView />
+			{:else if currentTab === 'Student Management'}
+				<AdminStudentManagementView />
+			{:else if currentTab === 'Certificate Verification'}
+				<AdminCertificateVerificationView />
+			{:else if currentTab === 'Batch Analytics'}
+				<BatchAnalyticsView />
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}

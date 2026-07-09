@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { API_BASE_URL } from '$lib/config';
+
+	let { mode = 'forced' }: { mode?: 'forced' | 'voluntary' } = $props();
 
 	// State variables (Svelte 5 runes)
 	let currentPassword = $state('');
@@ -12,6 +15,7 @@
 
 	let submitting = $state(false);
 	let success = $state(false);
+	let errorMsg = $state('');
 
 	// Deriving validation rules
 	let isMinLength = $derived(newPassword.length >= 8);
@@ -43,24 +47,66 @@
 		{ id: 'special', label: 'One Special Character', met: hasSpecial }
 	]);
 
-	const handleSubmit = (event: SubmitEvent) => {
+	const handleSubmit = async (event: SubmitEvent) => {
 		event.preventDefault();
+		errorMsg = '';
 		if (!isPasswordValid || !doPasswordsMatch || currentPassword.trim() === '') {
 			return;
 		}
 
 		submitting = true;
 
-		// Simulate password update API call
-		setTimeout(() => {
-			submitting = false;
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/admin/change-password`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+				},
+				body: JSON.stringify({
+					current_password: currentPassword,
+					new_password: newPassword,
+					confirm_password: confirmPassword
+				})
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to update password');
+			}
+
+			// Password changed successfully -> flag no longer forces a redirect
+			localStorage.setItem('admin_must_change_password', 'false');
 			success = true;
-		}, 1500);
+		} catch (err) {
+			errorMsg =
+				err instanceof Error ? err.message : 'Failed to update password. Please try again.';
+		} finally {
+			submitting = false;
+		}
 	};
 
-	const handleCancelLogout = () => {
-		// Navigate back to the admin login page
-		goto('/admin-portal');
+	const handleCancel = () => {
+		if (mode === 'voluntary') {
+			// Optional change from dashboard: just go back, keep the session
+			goto('/admin-portal/dashboard');
+		} else {
+			// Forced first-login flow: cancelling logs the admin out entirely
+			localStorage.removeItem('admin_token');
+			localStorage.removeItem('admin_must_change_password');
+			goto('/admin-portal');
+		}
+	};
+
+	const handleSuccessContinue = () => {
+		if (mode === 'voluntary') {
+			goto('/admin-portal/dashboard');
+		} else {
+			// Forced flow: per spec, admin must log in again with the new permanent password
+			localStorage.removeItem('admin_token');
+			goto('/admin-portal');
+		}
 	};
 </script>
 
@@ -89,53 +135,59 @@
 			</div>
 			<h2 class="text-2xl font-bold text-slate-900 font-serif leading-tight">Password Updated!</h2>
 			<p class="text-slate-550 text-sm mt-3 max-w-sm">
-				Your credentials have been successfully updated. You can now use your new password to sign
-				in.
+				{#if mode === 'voluntary'}
+					Your password has been updated successfully.
+				{:else}
+					Your credentials have been successfully updated. Please log in again with your new
+					password.
+				{/if}
 			</p>
 			<div class="mt-8 w-full">
-				<a
-					href="/admin-portal"
+				<button
+					onclick={handleSuccessContinue}
 					class="flex w-full py-3.5 items-center justify-center bg-inst-navy hover:bg-inst-navy/90 text-white font-bold text-sm tracking-wider uppercase rounded-xl transition duration-200 shadow-xs"
 				>
-					Return to Login
-				</a>
+					{mode === 'voluntary' ? 'Back to Dashboard' : 'Return to Login'}
+				</button>
 			</div>
 		</div>
 	{:else}
 		<!-- Security Policy Banner -->
-		<section
-			class="flex items-start gap-4 p-5 w-full max-w-[496px] bg-red-50/50 rounded-2xl border border-red-200/60 mb-6"
-			aria-labelledby="security-policy-heading"
-		>
-			<div class="pt-0.5 shrink-0">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke-width="2.5"
-					stroke="currentColor"
-					class="w-5 h-5 text-acad-red"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
-					/>
-				</svg>
-			</div>
-			<div class="flex flex-col gap-1 select-none">
-				<h2
-					id="security-policy-heading"
-					class="text-sm font-bold text-acad-red uppercase tracking-wider"
-				>
-					Security Policy
-				</h2>
-				<p class="text-xs text-red-800/80 leading-relaxed font-medium">
-					Temporary passwords issued by administrators expire after first use. All mentor accounts
-					must create a new password before continuing.
-				</p>
-			</div>
-		</section>
+		{#if mode === 'forced'}
+			<section
+				class="flex items-start gap-4 p-5 w-full max-w-[496px] bg-red-50/50 rounded-2xl border border-red-200/60 mb-6"
+				aria-labelledby="security-policy-heading"
+			>
+				<div class="pt-0.5 shrink-0">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="2.5"
+						stroke="currentColor"
+						class="w-5 h-5 text-acad-red"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+						/>
+					</svg>
+				</div>
+				<div class="flex flex-col gap-1 select-none">
+					<h2
+						id="security-policy-heading"
+						class="text-sm font-bold text-acad-red uppercase tracking-wider"
+					>
+						Security Policy
+					</h2>
+					<p class="text-xs text-red-800/80 leading-relaxed font-medium">
+						Temporary passwords issued by administrators expire after first use. All mentor accounts
+						must create a new password before continuing.
+					</p>
+				</div>
+			</section>
+		{/if}
 
 		<!-- Main Setup Card -->
 		<div
@@ -148,18 +200,29 @@
 				<div
 					class="px-2.5 py-0.5 bg-slate-200/70 rounded text-[10px] font-bold tracking-widest text-inst-navy uppercase"
 				>
-					PASSWORD SETUP
+					{mode === 'voluntary' ? 'CHANGE PASSWORD' : 'PASSWORD SETUP'}
 				</div>
 				<h1 class="text-2xl font-bold text-inst-navy font-serif leading-tight mt-2">
-					Create Secure Password
+					{mode === 'voluntary' ? 'Update Your Password' : 'Create Secure Password'}
 				</h1>
 				<p class="text-slate-500 text-xs mt-1">
-					Update your credentials to continue to the Mentor Portal
+					{mode === 'voluntary'
+						? 'Change your admin account password'
+						: 'Update your credentials to continue to the Admin Portal'}
 				</p>
 			</div>
 
 			<!-- Form -->
 			<form onsubmit={handleSubmit} class="p-6 sm:p-8 flex flex-col gap-5">
+				{#if errorMsg}
+					<div
+						class="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg"
+						transition:fade={{ duration: 150 }}
+					>
+						{errorMsg}
+					</div>
+				{/if}
+
 				<!-- Current Password -->
 				<div class="flex flex-col gap-1.5">
 					<label
@@ -191,7 +254,9 @@
 							type="password"
 							autoComplete="current-password"
 							bind:value={currentPassword}
-							placeholder="Enter temporary password"
+							placeholder={mode === 'voluntary'
+								? 'Enter current password'
+								: 'Enter temporary password'}
 							class="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-border-base text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-inst-navy focus:ring-2 focus:ring-inst-navy/10 transition-all duration-200"
 							required
 						/>
@@ -460,10 +525,10 @@
 
 					<button
 						type="button"
-						onclick={handleCancelLogout}
+						onclick={handleCancel}
 						class="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors focus:outline-none py-1.5 self-center"
 					>
-						Cancel & Logout
+						{mode === 'voluntary' ? 'Cancel' : 'Cancel & Logout'}
 					</button>
 				</div>
 			</form>
