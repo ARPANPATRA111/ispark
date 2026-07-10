@@ -305,6 +305,240 @@
 	let newActivityCredits = $state(5);
 	let newTrackName = $state('');
 
+	// ── System Settings (Step 7) ────────────────────────────────────────────────
+	type SettingStatus = 'Active' | 'Enabled' | 'Disabled';
+	interface PlatformSetting {
+		name: string;
+		description: string;
+		value: string;
+		status: SettingStatus;
+	}
+
+	const settingsTabs = [
+		'Academic Year',
+		'Credit Policy',
+		'Activity Rules',
+		'Notifications',
+		'Platform',
+		'Security'
+	];
+
+	let activeSettingsTab = $state('Academic Year');
+
+	let settingsSections = $state<Record<string, PlatformSetting[]>>({
+		'Academic Year': [
+			{
+				name: 'Current Academic Year',
+				description: 'Active academic cycle label displayed platform-wide',
+				value: '2025-2026',
+				status: 'Active'
+			},
+			{
+				name: 'Academic Year Start Date',
+				description: 'Official start date of the current academic year',
+				value: 'Aug 1, 2025',
+				status: 'Active'
+			},
+			{
+				name: 'Academic Year End Date',
+				description: 'Official end date of the current academic year',
+				value: 'May 31, 2026',
+				status: 'Active'
+			},
+			{
+				name: 'Enrollment Deadline',
+				description: 'Last date for activity enrollment submissions',
+				value: 'Sep 15, 2025',
+				status: 'Active'
+			}
+		],
+		'Credit Policy': [
+			{
+				name: 'Minimum Credits Required',
+				description: 'Total credits a student must earn to graduate',
+				value: '100',
+				status: 'Active'
+			},
+			{
+				name: 'Maximum Credits per Activity',
+				description: 'Upper cap on credits from a single activity',
+				value: '20',
+				status: 'Active'
+			},
+			{
+				name: 'Minimum Credits per Semester',
+				description: 'Credits a student must earn each semester',
+				value: '12',
+				status: 'Active'
+			},
+			{
+				name: 'Credit Rollover',
+				description: 'Carry unused credits to the next academic year',
+				value: 'Enabled',
+				status: 'Enabled'
+			},
+			{
+				name: 'Grace Credit Buffer',
+				description: 'Extra credits allowed beyond the target',
+				value: '5',
+				status: 'Active'
+			}
+		],
+		'Activity Rules': [
+			{
+				name: 'Max Active Enrollments',
+				description: 'Activities a student can be enrolled in at once',
+				value: '5',
+				status: 'Active'
+			},
+			{
+				name: 'Mentor Approval Required',
+				description: 'Require mentor sign-off before credit is granted',
+				value: 'Enabled',
+				status: 'Enabled'
+			},
+			{
+				name: 'Auto-Verification Threshold',
+				description: 'Score above which certificates auto-verify',
+				value: '90%',
+				status: 'Active'
+			},
+			{
+				name: 'Self-Reported Activities',
+				description: 'Allow students to log their own activities',
+				value: 'Disabled',
+				status: 'Disabled'
+			},
+			{
+				name: 'Resubmission Window',
+				description: 'Days allowed to resubmit a rejected certificate',
+				value: '7 days',
+				status: 'Active'
+			}
+		],
+		Notifications: [
+			{
+				name: 'Email Notifications',
+				description: 'Send system emails for key events',
+				value: 'Enabled',
+				status: 'Enabled'
+			},
+			{
+				name: 'OTP Expiry Duration',
+				description: 'Validity window for verification codes',
+				value: '15 min',
+				status: 'Active'
+			},
+			{
+				name: 'Reminder Frequency',
+				description: 'How often pending-task reminders are sent',
+				value: 'Weekly',
+				status: 'Active'
+			},
+			{
+				name: 'Announcement Broadcasts',
+				description: 'Push platform-wide announcements to all users',
+				value: 'Enabled',
+				status: 'Enabled'
+			}
+		],
+		Platform: [
+			{
+				name: 'Platform Name',
+				description: 'Display name shown across the portal',
+				value: 'iSPARC',
+				status: 'Active'
+			},
+			{
+				name: 'Maintenance Mode',
+				description: 'Temporarily disable access for non-admins',
+				value: 'Disabled',
+				status: 'Disabled'
+			},
+			{
+				name: 'Default Time Zone',
+				description: 'Base time zone for schedules and logs',
+				value: 'IST (UTC+5:30)',
+				status: 'Active'
+			},
+			{
+				name: 'Default Language',
+				description: 'Default interface language for new users',
+				value: 'English',
+				status: 'Active'
+			}
+		],
+		Security: [
+			{
+				name: 'Minimum Password Length',
+				description: 'Required characters for user passwords',
+				value: '8',
+				status: 'Active'
+			},
+			{
+				name: 'Session Timeout',
+				description: 'Idle minutes before automatic logout',
+				value: '30 min',
+				status: 'Active'
+			},
+			{
+				name: 'Two-Factor Authentication',
+				description: 'Require 2FA for admin accounts',
+				value: 'Enabled',
+				status: 'Enabled'
+			},
+			{
+				name: 'Max Login Attempts',
+				description: 'Failed logins before temporary lockout',
+				value: '5',
+				status: 'Active'
+			}
+		]
+	});
+
+	let currentSettings = $derived(settingsSections[activeSettingsTab] ?? []);
+
+	// Edit setting modal state
+	let isEditSettingOpen = $state(false);
+	let editSettingIndex = $state(-1);
+	let editSettingName = $state('');
+	let editSettingValue = $state('');
+
+	function openEditSetting(index: number) {
+		const s = settingsSections[activeSettingsTab][index];
+		editSettingIndex = index;
+		editSettingName = s.name;
+		editSettingValue = s.value;
+		isEditSettingOpen = true;
+	}
+
+	function handleSaveSetting(e: Event) {
+		e.preventDefault();
+		if (editSettingIndex < 0 || !editSettingValue.trim()) return;
+		settingsSections[activeSettingsTab][editSettingIndex].value = editSettingValue.trim();
+		triggerToast(`"${editSettingName}" updated successfully!`);
+		isEditSettingOpen = false;
+		editSettingIndex = -1;
+	}
+
+	function handleSaveAllSettings() {
+		triggerToast('All system settings saved successfully!');
+	}
+
+	function handleResetSettings() {
+		triggerToast(`"${activeSettingsTab}" settings reset to default values.`);
+	}
+
+	function settingStatusClass(status: SettingStatus): string {
+		return status === 'Disabled'
+			? 'bg-slate-100 text-slate-500 border-slate-200'
+			: 'bg-emerald-50 text-emerald-700 border-emerald-100';
+	}
+
+	function settingStatusDot(status: SettingStatus): string {
+		return status === 'Disabled' ? 'bg-slate-400' : 'bg-emerald-500';
+	}
+
 	// Toast states
 	interface Toast {
 		id: number;
@@ -753,6 +987,9 @@
 				<span class="text-xl font-bold tracking-tight text-slate-900 font-serif">
 					i<span class="text-[#881B1B]">SPARC</span>
 				</span>
+				<span class="text-[9px] font-bold text-slate-600 tracking-wider uppercase -mt-1">
+					IIPS DAVV CELL
+				</span>
 			</div>
 		</div>
 
@@ -764,7 +1001,7 @@
 					class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 					item.name
 						? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
-						: 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}"
+						: 'text-slate-800 hover:bg-slate-50 hover:text-slate-900'}"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -785,7 +1022,7 @@
 		<div class="p-4 border-t border-slate-100">
 			<button
 				onclick={handleLogout}
-				class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+				class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-800 hover:bg-rose-50 hover:text-rose-600 transition-colors"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -833,6 +1070,9 @@
 						<span class="text-xl font-bold tracking-tight text-slate-900 font-serif">
 							i<span class="text-[#881B1B]">SPARC</span>
 						</span>
+						<span class="text-[9px] font-bold text-slate-600 tracking-wider uppercase -mt-1">
+							IIPS DAVV CELL
+						</span>
 					</div>
 				</div>
 				<button
@@ -863,7 +1103,7 @@
 						class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 						item.name
 							? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
-							: 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}"
+							: 'text-slate-800 hover:bg-slate-50 hover:text-slate-900'}"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -886,7 +1126,7 @@
 						handleLogout();
 						toggleMobileSidebar();
 					}}
-					class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+					class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-bold text-slate-800 hover:bg-rose-50 hover:text-rose-600 transition-colors"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -2772,6 +3012,312 @@
 						</div>
 					</div>
 				</div>
+			{:else if currentTab === 'System Settings'}
+				<!-- System Settings (Step 7) -->
+				<!-- Overview Stat Cards -->
+				<section
+					class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 select-none"
+					aria-label="System settings overview"
+				>
+					<!-- Academic Year -->
+					<div
+						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
+					>
+						<div>
+							<span class="text-2xl font-bold font-serif text-slate-900">2025–26</span>
+							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Academic Year</h3>
+							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+								Current cycle
+							</p>
+						</div>
+						<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"
+								/>
+							</svg>
+						</div>
+					</div>
+
+					<!-- Credit Policies -->
+					<div
+						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
+					>
+						<div>
+							<span class="text-2xl font-bold font-serif text-slate-900"
+								>{settingsSections['Credit Policy'].length + 3}</span
+							>
+							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Credit Policies</h3>
+							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+								Rules active
+							</p>
+						</div>
+						<div class="p-2.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 0 0 2.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 0 1 2.916.52 6.003 6.003 0 0 1-5.395 4.972m0 0a6.726 6.726 0 0 1-2.749 1.35m0 0a6.772 6.772 0 0 1-3.044 0"
+								/>
+							</svg>
+						</div>
+					</div>
+
+					<!-- Required Activities -->
+					<div
+						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
+					>
+						<div>
+							<span class="text-2xl font-bold font-serif text-slate-900">12</span>
+							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">
+								Required Activities
+							</h3>
+							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+								Configured
+							</p>
+						</div>
+						<div class="p-2.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+								/>
+							</svg>
+						</div>
+					</div>
+
+					<!-- System Status -->
+					<div
+						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
+					>
+						<div>
+							<span class="text-2xl font-bold font-serif text-emerald-600">Active</span>
+							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">System Status</h3>
+							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+								All systems normal
+							</p>
+						</div>
+						<div class="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
+								/>
+							</svg>
+						</div>
+					</div>
+				</section>
+
+				<!-- Overview + Platform Summary grid -->
+				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+					<!-- System Settings Overview (col-span-2) -->
+					<div
+						class="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col"
+					>
+						<!-- Header -->
+						<div
+							class="p-5 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/20 select-none"
+						>
+							<div>
+								<h3 class="text-sm font-bold font-serif text-slate-905">
+									System Settings Overview
+								</h3>
+								<p class="text-[11px] text-slate-500 font-semibold mt-0.5">
+									Manage platform-wide configuration settings.
+								</p>
+							</div>
+							<button
+								type="button"
+								onclick={handleSaveAllSettings}
+								class="px-4 py-2 bg-[#C23A3A] hover:bg-[#B03131] text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors focus:outline-none shrink-0"
+							>
+								Save Changes
+							</button>
+						</div>
+
+						<!-- Section Tabs -->
+						<div
+							class="px-5 pt-3 border-b border-slate-100 flex flex-wrap gap-1.5 bg-white select-none"
+						>
+							{#each settingsTabs as tab}
+								<button
+									type="button"
+									onclick={() => (activeSettingsTab = tab)}
+									class="px-3.5 py-2 rounded-t-lg text-xs font-bold transition-all border-b-2 -mb-px
+									{activeSettingsTab === tab
+										? 'text-[#881B1B] border-[#881B1B]'
+										: 'text-slate-500 border-transparent hover:text-slate-800'}"
+								>
+									{tab}
+								</button>
+							{/each}
+						</div>
+
+						<!-- Settings Table -->
+						<div class="overflow-x-auto flex-grow">
+							<table class="w-full text-left border-collapse">
+								<thead>
+									<tr
+										class="border-b border-slate-150 bg-slate-50/50 text-[10px] font-extrabold text-slate-405 uppercase tracking-wider"
+									>
+										<th class="py-3.5 px-5">Setting Name</th>
+										<th class="py-3.5 px-5">Description</th>
+										<th class="py-3.5 px-5">Value</th>
+										<th class="py-3.5 px-5">Status</th>
+										<th class="py-3.5 px-5 text-center">Actions</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-slate-100 text-xs font-sans">
+									{#each currentSettings as setting, index (setting.name)}
+										<tr class="hover:bg-slate-50/30 transition-colors">
+											<td class="py-4 px-5 font-bold text-slate-800 align-top">{setting.name}</td>
+											<td class="py-4 px-5 text-slate-500 font-semibold align-top max-w-xs">
+												{setting.description}
+											</td>
+											<td class="py-4 px-5 font-bold text-slate-800 align-top whitespace-nowrap">
+												{setting.value}
+											</td>
+											<td class="py-4 px-5 align-top">
+												<span
+													class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border {settingStatusClass(
+														setting.status
+													)}"
+												>
+													<span class="w-1.5 h-1.5 rounded-full {settingStatusDot(setting.status)}"
+													></span>
+													{setting.status}
+												</span>
+											</td>
+											<td class="py-4 px-5 align-top">
+												<div class="flex items-center justify-center">
+													<button
+														type="button"
+														onclick={() => openEditSetting(index)}
+														aria-label="Edit {setting.name}"
+														class="p-1.5 border border-slate-200 text-slate-500 hover:text-[#881B1B] hover:bg-slate-100 rounded-lg transition-colors focus:outline-none"
+													>
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															fill="none"
+															viewBox="0 0 24 24"
+															stroke-width="2"
+															stroke="currentColor"
+															class="w-4 h-4"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
+															/>
+														</svg>
+													</button>
+												</div>
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+
+						<!-- Footer -->
+						<div
+							class="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-3 select-none"
+						>
+							<span class="text-slate-500 font-semibold text-[11px]">
+								{currentSettings.length} settings in this section
+							</span>
+							<button
+								type="button"
+								onclick={handleResetSettings}
+								class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-[11px] uppercase tracking-wider rounded-lg transition-colors focus:outline-none"
+							>
+								Reset to Default
+							</button>
+						</div>
+					</div>
+
+					<!-- Platform Summary (col-span-1) -->
+					<div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+						<div class="p-5 border-b border-slate-100 bg-slate-50/20 select-none">
+							<h3 class="text-sm font-bold font-serif text-slate-905">Platform Summary</h3>
+							<p class="text-[11px] text-slate-500 font-semibold mt-0.5">
+								Global configuration overview
+							</p>
+						</div>
+						<div class="p-5 space-y-1">
+							<div
+								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
+							>
+								<span class="text-xs font-semibold text-slate-500">Academic Year</span>
+								<span class="text-xs font-bold text-slate-900">2025–26</span>
+							</div>
+							<div
+								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
+							>
+								<span class="text-xs font-semibold text-slate-500">Credit Policies</span>
+								<span class="text-xs font-bold text-slate-900"
+									>{settingsSections['Credit Policy'].length + 3}</span
+								>
+							</div>
+							<div
+								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
+							>
+								<span class="text-xs font-semibold text-slate-500">Activity Rules</span>
+								<span class="text-xs font-bold text-slate-900">12</span>
+							</div>
+							<div
+								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
+							>
+								<span class="text-xs font-semibold text-slate-500">Notif. Templates</span>
+								<span class="text-xs font-bold text-slate-900">5</span>
+							</div>
+							<div class="flex items-center justify-between py-2.5">
+								<span class="text-xs font-semibold text-slate-500">System Status</span>
+								<span class="text-xs font-bold text-emerald-600">Active</span>
+							</div>
+
+							<button
+								type="button"
+								onclick={() => triggerToast('Opening global settings editor...')}
+								class="w-full mt-3 py-2.5 bg-[#C23A3A] hover:bg-[#B03131] text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors focus:outline-none"
+							>
+								Edit Global Settings
+							</button>
+						</div>
+					</div>
+				</div>
 			{:else}
 				<!-- Under Construction placeholder for other tabs -->
 				<div
@@ -3239,6 +3785,92 @@
 						</button>
 					</div>
 				</div>
+			</div>
+		{/if}
+
+		<!-- Edit Setting Modal (Step 7) -->
+		{#if isEditSettingOpen}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				onclick={(e) => {
+					if (e.target === e.currentTarget) isEditSettingOpen = false;
+				}}
+				transition:fade={{ duration: 150 }}
+				class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+			>
+				<form
+					onsubmit={handleSaveSetting}
+					class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans"
+				>
+					<div
+						class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30"
+					>
+						<div>
+							<h3 class="text-sm font-bold font-serif text-slate-900">Edit Setting</h3>
+							<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+								{activeSettingsTab}
+							</p>
+						</div>
+						<button
+							type="button"
+							onclick={() => (isEditSettingOpen = false)}
+							aria-label="Close modal"
+							class="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<div class="p-6 space-y-4">
+						<div class="flex flex-col gap-1.5">
+							<span class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+								>SETTING NAME</span
+							>
+							<span class="text-sm font-bold text-slate-800">{editSettingName}</span>
+						</div>
+						<div class="flex flex-col gap-1.5">
+							<label
+								for="edit-setting-value"
+								class="text-[10px] font-extrabold text-slate-650 tracking-wider">VALUE *</label
+							>
+							<input
+								id="edit-setting-value"
+								type="text"
+								bind:value={editSettingValue}
+								required
+								class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+							/>
+						</div>
+					</div>
+
+					<div
+						class="p-5 border-t border-slate-150 flex items-center justify-end gap-2.5 bg-slate-50/30"
+					>
+						<button
+							type="button"
+							onclick={() => (isEditSettingOpen = false)}
+							class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							class="px-4 py-2 bg-[#881B1B] hover:bg-[#881B1B]/90 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
+						>
+							Save Setting
+						</button>
+					</div>
+				</form>
 			</div>
 		{/if}
 	</div>
