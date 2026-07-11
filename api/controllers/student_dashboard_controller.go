@@ -33,7 +33,6 @@ func GetActivities(c *fiber.Ctx) error {
 
 	return c.JSON(activities)
 }
-
 // UpdateProfile updates student's editable profile info
 func UpdateProfile(c *fiber.Ctx) error {
 	rollNo := c.Locals("roll_no").(string)

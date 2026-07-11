@@ -18,6 +18,8 @@ type RegisterInput struct {
 	Semester        int    `json:"semester"`
 	ContactNo       string `json:"contact_no"`
 	EmailID         string `json:"email_id"`
+	DOB             string `json:"dob"`
+	Gender          string `json:"gender"`
 	EnrollmentNo    string `json:"enrollment_no"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirm_password"`
@@ -125,6 +127,8 @@ func Register(c *fiber.Ctx) error {
 		Semester:     input.Semester,
 		ContactNo:    input.ContactNo,
 		EmailID:      input.EmailID,
+		DOB:          input.DOB,
+		Gender:       input.Gender,
 		EnrollmentNo: input.EnrollmentNo,
 		Password:     hashedPassword,
 		IsVerified:   false,
@@ -256,6 +260,8 @@ func VerifyOTP(c *fiber.Ctx) error {
 			"course_name":   student.CourseName,
 			"semester":      student.Semester,
 			"contact_no":    student.ContactNo,
+			"dob":           student.DOB,
+			"gender":        student.Gender,
 			"enrollment_no": student.EnrollmentNo,
 		},
 	})
@@ -365,6 +371,8 @@ func Login(c *fiber.Ctx) error {
 			"course_name":   student.CourseName,
 			"semester":      student.Semester,
 			"contact_no":    student.ContactNo,
+			"dob":           student.DOB,
+			"gender":        student.Gender,
 			"enrollment_no": student.EnrollmentNo,
 		},
 	})
@@ -568,6 +576,8 @@ func GetProfile(c *fiber.Ctx) error {
 			"course_name":   student.CourseName,
 			"semester":      student.Semester,
 			"contact_no":    student.ContactNo,
+			"dob":           student.DOB,
+			"gender":        student.Gender,
 			"enrollment_no": student.EnrollmentNo,
 			"is_verified":   student.IsVerified,
 			"created_at":    student.CreatedAt,
