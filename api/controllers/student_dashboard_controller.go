@@ -209,6 +209,7 @@ func GetEnrollments(c *fiber.Ctx) error {
 
 	return c.JSON(enrollments)
 }
+
 // GetDashboardStats returns stats for the student dashboard home page
 func GetDashboardStats(c *fiber.Ctx) error {
 	rollNo := c.Locals("roll_no").(string)
