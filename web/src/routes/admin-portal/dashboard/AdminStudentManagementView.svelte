@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
+	import { env } from '$env/dynamic/public';
 	import AdminStudentDetailView from './AdminStudentDetailView.svelte';
 
 	// Optional prop to filter students by batch when navigated from Batch Analytics
@@ -30,7 +31,11 @@
 		roll_no?: string;
 		name: string;
 		course_name?: string;
+		semester?: number;
 		email_id?: string;
+		credits_earned?: number;
+		activity_count?: number;
+		certificates?: { id: number }[]; // array from backend
 	}
 
 	// ── State Variables ────────────────────────────────────────────────────────
@@ -42,22 +47,23 @@
 			name: s.name,
 			regNo: s.roll_no ?? '',
 			department: s.course_name ?? '',
-			semester: 1,
-			creditsEarned: 0,
+			semester: s.semester ?? 1,
+			creditsEarned: s.credits_earned ?? 0,
 			creditsTarget: 200,
-			certificates: 0,
-			activityCount: 0,
-			status: 'Active',
+			certificates: s.certificates?.length ?? 0,
+			activityCount: s.activity_count ?? 0,
+			status: 'Active', // still no backend field for this — flag separately
 			email: s.email_id ?? '',
-			batch: '2026'
+			batch: s.roll_no?.match(/^[A-Z]+2K\d+/)?.[0] ?? ''
 		};
 	}
 
 	// ── Data Fetching ──────────────────────────────────────────────────────────
+	const API_BASE = env.PUBLIC_API_BASE_URL;
 	onMount(async () => {
 		try {
 			const token = localStorage.getItem('admin_token');
-			const response = await fetch('http://localhost:8080/api/admin/students', {
+			const response = await fetch(`${API_BASE}/api/admin/students`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 
@@ -145,7 +151,7 @@
 	async function openStudentModal(student: Student) {
 		try {
 			const token = localStorage.getItem('admin_token');
-			const res = await fetch(`http://localhost:8080/api/admin/students/${student.regNo}`, {
+			const res = await fetch(`${API_BASE}/api/admin/students/${student.regNo}`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 

@@ -30,36 +30,39 @@ func SeedDefaultStudents() {
 
 	activities := []models.Activity{
 		{
-			Name:          "Leadership Workshop",
-			Category:      "Leadership",
-			Description:   "Leadership development workshop.",
-			StudentRollNo: student.RollNo,
-			Credits:       10,
-			Mode:          "Offline",
-			RegDeadline:   time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
-			ActivityDate:  time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC),
-			Venue:         "Seminar Hall",
-			Coordinator:   "Dr. Mehta",
-			Status:        "Open",
+			Name:         "Leadership Workshop",
+			Category:     "Leadership",
+			Description:  "Leadership development workshop.",
+			Credits:      10,
+			Mode:         "Offline",
+			RegDeadline:  time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
+			ActivityDate: time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC),
+			Venue:        "Seminar Hall",
+			Coordinator:  "Dr. Mehta",
+			Status:       "Open",
 		},
 		{
-			Name:          "Beach Cleanup",
-			Category:      "Social Service",
-			Description:   "Community service event.",
-			StudentRollNo: student.RollNo,
-			Credits:       5,
-			Mode:          "Offline",
-			RegDeadline:   time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC),
-			ActivityDate:  time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC),
-			Venue:         "City Beach",
-			Coordinator:   "NSS Cell",
-			Status:        "Open",
+			Name:         "Beach Cleanup",
+			Category:     "Social Service",
+			Description:  "Community service event.",
+			Credits:      5,
+			Mode:         "Offline",
+			RegDeadline:  time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC),
+			ActivityDate: time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC),
+			Venue:        "City Beach",
+			Coordinator:  "NSS Cell",
+			Status:       "Open",
 		},
 	}
 
-	for _, activity := range activities {
-		DB.Where("student_roll_no = ? AND name = ?", activity.StudentRollNo, activity.Name).
-			FirstOrCreate(&activity)
+	for i := range activities {
+		DB.Where("name = ?", activities[i].Name).FirstOrCreate(&activities[i])
+		DB.Where("student_roll_no = ? AND activity_id = ?", student.RollNo, activities[i].ID).
+			FirstOrCreate(&models.Enrollment{
+				StudentRollNo: student.RollNo,
+				ActivityID:    activities[i].ID,
+				Status:        "Enrolled",
+			})
 	}
 
 	// ---------------- Certificates ----------------

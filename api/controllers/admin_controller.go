@@ -19,16 +19,13 @@ func AdminLogin(c *fiber.Ctx) error {
 	if input.AdminID == "" || input.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Admin ID and Password are required"})
 	}
-	// Find the admin using your existing Admin model
 	var admin models.Admin
 	if err := config.DB.Where("admin_id = ?", input.AdminID).First(&admin).Error; err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
 	}
-	// Verify Password
 	if !utils.CheckPasswordHash(input.Password, admin.Password) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
 	}
-	// Generate Access Token
 	accessToken, err := utils.GenerateAccessToken(admin.AdminID, admin.Email, admin.Role)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate access token"})
@@ -45,7 +42,7 @@ func AdminLogin(c *fiber.Ctx) error {
 	})
 }
 
-// 1. POST /admin/change-password -> ChangePassword lets a logged-in admin set a new password (used for both voluntary changes and the forced first-login reset flow)
+// 1. POST /admin/change-password
 func AdminChangePassword(c *fiber.Ctx) error {
 	var input models.ChangePasswordInput
 	if err := c.BodyParser(&input); err != nil {
@@ -86,41 +83,50 @@ func AdminChangePassword(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Password changed successfully"})
 }
 
-// 2. GET /api/admin/students -> View assigned students
-func GetAllStudents(c *fiber.Ctx) error {
-	// Get token
+func getAuthenticatedAdmin(c *fiber.Ctx) (*models.Admin, error) {
 	authHeader := c.Get("Authorization")
 	if len(authHeader) < 8 {
-		return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
 	tokenString := authHeader[7:]
-
-	// Validate token
 	claims, err := utils.ValidateAccessToken(tokenString)
 	if err != nil {
-		return c.Status(401).JSON(fiber.Map{"error": "Invalid token"})
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid token")
+	}
+	var admin models.Admin
+	if err := config.DB.Where("admin_id = ?", claims.RollNo).First(&admin).Error; err != nil {
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "User not found")
 	}
 
-	// Get current admin
-	var currentUser models.Admin
-	if err := config.DB.Where("admin_id = ?", claims.RollNo).First(&currentUser).Error; err != nil {
-		return c.Status(401).JSON(fiber.Map{"error": "User not found"})
+	return &admin, nil
+}
+
+// 2. GET /api/admin/students -> View assigned students
+func GetAllStudents(c *fiber.Ctx) error {
+	currentUser, err := getAuthenticatedAdmin(c)
+	if err != nil {
+		return err
 	}
 
-	// Build query
-	query := config.DB.Model(&models.Student{}).
-		Select("roll_no, name, course_name, semester, email_id")
-
-	// Restrict admin to assigned batch
+	dbQuery := config.DB.Preload("Certificates").Preload("Enrollments")
 	if currentUser.Role == "admin" {
-		query = query.Where("roll_no LIKE ?", currentUser.AssignedBatch+"%")
+		dbQuery = dbQuery.Where("roll_no LIKE ?", currentUser.AssignedBatch+"%")
 	}
 
 	var students []models.Student
-	if err := query.Find(&students).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+	if err := dbQuery.Find(&students).Error; err != nil {
+		return errJSON(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	for i := range students {
+		credits := 0
+		for _, cert := range students[i].Certificates {
+			if cert.Status == "Approved" {
+				credits += cert.Credits
+			}
+		}
+		students[i].CreditsEarned = credits
+		students[i].ActivityCount = len(students[i].Enrollments)
 	}
 
 	return c.JSON(fiber.Map{"students": students})
@@ -130,39 +136,31 @@ func GetAllStudents(c *fiber.Ctx) error {
 func GetStudentDetail(c *fiber.Ctx) error {
 	roll := c.Params("roll")
 
-	// Get token
-	authHeader := c.Get("Authorization")
-	if len(authHeader) < 8 {
-		return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
-	}
-	tokenString := authHeader[7:]
-
-	// Validate token
-	claims, err := utils.ValidateAccessToken(tokenString)
+	currentUser, err := getAuthenticatedAdmin(c)
 	if err != nil {
-		return c.Status(401).JSON(fiber.Map{"error": "Invalid token"})
+		return err
 	}
 
-	// Get current admin
-	var currentUser models.Admin
-	if err := config.DB.Where("admin_id = ?", claims.RollNo).First(&currentUser).Error; err != nil {
-		return c.Status(401).JSON(fiber.Map{"error": "User not found"})
-	}
-
-	// Build query
-	query := config.DB.Preload("Activities").
+	query := config.DB.Preload("Enrollments.Activity").
 		Preload("Certificates").
 		Where("roll_no = ?", roll)
 
-	// Restrict admin to assigned batch
 	if currentUser.Role == "admin" {
 		query = query.Where("roll_no LIKE ?", currentUser.AssignedBatch+"%")
 	}
 
 	var student models.Student
 	if err := query.First(&student).Error; err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Student not found"})
+		return errJSON(c, fiber.StatusNotFound, "Student not found")
 	}
+	credits := 0
+	for _, cert := range student.Certificates {
+		if cert.Status == "Approved" {
+			credits += cert.Credits
+		}
+	}
+	student.CreditsEarned = credits
+	student.ActivityCount = len(student.Enrollments)
 
 	return c.JSON(fiber.Map{"student": student})
 }

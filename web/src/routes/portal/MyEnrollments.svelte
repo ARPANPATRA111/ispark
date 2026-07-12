@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { API_BASE_URL } from '$lib/config';
+
 	// Define props
 	let { onUploadCertificate }: { onUploadCertificate?: () => void } = $props();
 
@@ -41,169 +43,195 @@
 		time: string;
 	}
 
-	// 7 mock records exactly matching the screenshot
-	const registeredActivities: RegisteredActivity[] = [
-		{
-			name: 'National Hackathon 2026',
-			category: 'Technical',
-			enrollmentDate: '10 Jun 2026',
-			activityDate: '05 Jul 2026',
-			credits: 15,
-			status: 'Registered',
-			action: 'View Details'
-		},
-		{
-			name: 'Inter College Debate',
-			category: 'Public Speaking',
-			enrollmentDate: '05 Jun 2026',
-			activityDate: '20 Jun 2026',
-			credits: 10,
-			status: 'Completed',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Blood Donation Drive',
-			category: 'Social Service',
-			enrollmentDate: '15 May 2026',
-			activityDate: '25 May 2026',
-			credits: 5,
-			status: 'Pending Verification',
-			action: 'Upload Certificate'
-		},
-		{
-			name: 'Robotics Workshop',
-			category: 'Technical',
-			enrollmentDate: '02 Apr 2026',
-			activityDate: '18 Apr 2026',
-			credits: 12,
-			status: 'Verified',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Annual Cultural Fest',
-			category: 'Cultural',
-			enrollmentDate: '01 Apr 2026',
-			activityDate: '20 Mar 2026',
-			credits: 8,
-			status: 'Completed',
-			action: 'View Certificate'
-		},
-		{
-			name: 'Research Presentation Contest',
-			category: 'Academic',
-			enrollmentDate: '15 Feb 2026',
-			activityDate: '10 Mar 2026',
-			credits: 12,
-			status: 'Verified',
-			action: 'View Certificate'
-		},
-		{
-			name: 'National Science Olympiad',
-			category: 'Technical',
-			enrollmentDate: '30 Jan 2026',
-			activityDate: '05 Feb 2026',
-			credits: 10,
-			status: 'Rejected',
-			action: 'View Details'
+	interface APIActivity {
+		name: string;
+		category: string;
+		activity_date: string;
+		credits: number;
+		venue?: string;
+	}
+
+	interface APIEnrollment {
+		status: string;
+		created_at: string;
+		activity: APIActivity;
+	}
+
+	interface APICreditCategory {
+		category: string;
+		credits: number;
+	}
+
+	let token = localStorage.getItem('access_token') || '';
+	let registeredActivities = $state<RegisteredActivity[]>([]);
+	let upcomingActivities = $state<UpcomingActivity[]>([]);
+	let creditCategorySummaries = $state<CreditCategorySummary[]>([]);
+	let stats = $state({
+		activities_participated: 0,
+		certificates_uploaded: 0,
+		pending_certificates: 0,
+		approved_certificates: 0,
+		rejected_certificates: 0,
+		credits_earned: 0
+	});
+
+	function formatDate(dateStr: string) {
+		if (!dateStr) return '';
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		});
+	}
+
+	async function loadEnrollmentsData() {
+		try {
+			// Fetch enrollments
+			const enrollRes = await fetch(`${API_BASE_URL}/api/student/enrollments`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (enrollRes.ok) {
+				const data = (await enrollRes.json()) as APIEnrollment[];
+				registeredActivities = (data || []).map((e: APIEnrollment) => {
+					let action: 'View Details' | 'View Certificate' | 'Upload Certificate' = 'View Details';
+					if (e.status === 'Completed' || e.status === 'Enrolled') {
+						action = 'Upload Certificate';
+					}
+
+					return {
+						name: e.activity.name,
+						category: e.activity.category,
+						enrollmentDate: formatDate(e.created_at),
+						activityDate: formatDate(e.activity.activity_date),
+						credits: e.activity.credits,
+						status:
+							e.status === 'Enrolled' ? 'Registered' : (e.status as RegisteredActivity['status']), // Enrolled -> Registered
+						action: action
+					};
+				});
+
+				// Calculate upcoming activities from future activities enrolled
+				upcomingActivities = (data || [])
+					.filter((e: APIEnrollment) => new Date(e.activity.activity_date) > new Date())
+					.map((e: APIEnrollment) => {
+						const diffTime = Math.abs(
+							new Date(e.activity.activity_date).getTime() - new Date().getTime()
+						);
+						const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+						return {
+							name: e.activity.name,
+							date: formatDate(e.activity.activity_date),
+							time: '10:00 AM',
+							venue: e.activity.venue || 'IIPS Venue',
+							credits: e.activity.credits,
+							daysLeft: `${diffDays}d left`
+						};
+					});
+			}
+
+			// Fetch Marksheet details to get dynamic credits per category
+			const marksheetRes = await fetch(`${API_BASE_URL}/api/student/marksheet`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (marksheetRes.ok) {
+				const data = await marksheetRes.json();
+				creditCategorySummaries = (data.credit_categories || []).map((cat: APICreditCategory) => {
+					let req = 40; // baseline
+					if (cat.category.toLowerCase().includes('technical')) req = 60;
+					else if (cat.category.toLowerCase().includes('social')) req = 30;
+
+					return {
+						category: cat.category,
+						creditsEarned: cat.credits,
+						creditsRequired: req,
+						percentage: Math.min(Math.round((cat.credits / req) * 100), 100)
+					};
+				});
+			}
+
+			// Fetch stats
+			const statsRes = await fetch(`${API_BASE_URL}/api/student/dashboard/stats`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (statsRes.ok) {
+				stats = await statsRes.json();
+			}
+		} catch (err) {
+			console.error(err);
 		}
-	];
+	}
 
-	// Upcoming activities
-	const upcomingActivities: UpcomingActivity[] = [
-		{
-			name: 'National Hackathon 2026',
-			date: '5 July 2026',
-			time: '10:00 AM',
-			venue: 'IIPS Auditorium',
-			credits: 15,
-			daysLeft: '12d left'
-		},
-		{
-			name: 'Innovation Challenge',
-			date: '12 July 2026',
-			time: '09:00 AM',
-			venue: 'Seminar Hall B',
-			credits: 10,
-			daysLeft: '19d left'
-		},
-		{
-			name: 'Technical Workshop Series',
-			date: '20 July 2026',
-			time: '11:00 AM',
-			venue: 'Computer Lab 3',
-			credits: 8,
-			daysLeft: '27d left'
-		},
-		{
-			name: 'Research Symposium',
-			date: '2 Aug 2026',
-			time: '10:30 AM',
-			venue: 'Conference Room',
-			credits: 12,
-			daysLeft: '40d left'
+	$effect(() => {
+		loadEnrollmentsData();
+	});
+
+	let totalCreditsEarned = $derived(
+		creditCategorySummaries.reduce((sum, cat) => sum + cat.creditsEarned, 0)
+	);
+	let totalCreditsPercentage = $derived(
+		Math.min(Math.round((totalCreditsEarned / 200) * 100), 100)
+	);
+
+	// Recent updates timeline data derived from actual registered activities, or falling back to stats
+	const recentUpdates: RecentUpdate[] = $derived.by(() => {
+		if (registeredActivities.length > 0) {
+			return registeredActivities.slice(0, 3).map((act) => {
+				let type: 'success' | 'star' | 'doc' | 'db' = 'success';
+				if (act.status === 'Verified') {
+					type = 'star';
+				} else if (act.status === 'Pending Verification') {
+					type = 'doc';
+				} else if (act.status === 'Rejected') {
+					type = 'db';
+				} else if (act.status === 'Completed') {
+					type = 'success';
+				}
+
+				return {
+					type,
+					text: `Enrolled in ${act.name} (${act.status})`,
+					time: act.enrollmentDate
+				};
+			});
 		}
-	];
 
-	// Credit Summary category values
-	const creditCategorySummaries: CreditCategorySummary[] = [
-		{
-			category: 'Technical Activities',
-			creditsEarned: 48,
-			creditsRequired: 60,
-			percentage: 80
-		},
-		{
-			category: 'Public Speaking',
-			creditsEarned: 24,
-			creditsRequired: 40,
-			percentage: 60
-		},
-		{
-			category: 'Social Service',
-			creditsEarned: 18,
-			creditsRequired: 30,
-			percentage: 60
-		},
-		{
-			category: 'Sports',
-			creditsEarned: 12,
-			creditsRequired: 30,
-			percentage: 40
-		}
-	];
+		return [
+			{
+				type: 'success' as const,
+				text: `${stats.activities_participated} total activities enrolled`,
+				time: 'Sync complete'
+			},
+			{
+				type: 'star' as const,
+				text: `${stats.credits_earned} total credits approved`,
+				time: 'Live update'
+			},
+			{
+				type: 'doc' as const,
+				text: `${stats.pending_certificates} certificates pending review`,
+				time: 'Pending audit'
+			}
+		];
+	});
 
-	// Recent updates timeline data
-	const recentUpdates: RecentUpdate[] = [
-		{
-			type: 'success',
-			text: 'National Hackathon registration confirmed',
-			time: '2 days ago'
-		},
-		{
-			type: 'star',
-			text: '5 credits added for Robotics Workshop',
-			time: '5 days ago'
-		},
-		{
-			type: 'doc',
-			text: 'Certificate verified for Annual Fest',
-			time: '1 week ago'
-		},
-		{
-			type: 'db',
-			text: 'Enrolled in Innovation Challenge',
-			time: '2 weeks ago'
-		}
-	];
+	// Selection state: selected row index
+	let selectedActivityIndex = $state(0);
 
-	// Selection state: selected row index (default to index 1 "Inter College Debate" as shown in the screenshot)
-	let selectedActivityIndex = $state(1);
-
-	// Get selected activity details
-	let selectedActivity = $derived(registeredActivities[selectedActivityIndex]);
+	// Get selected activity details (safely guarded)
+	let selectedActivity = $derived(
+		registeredActivities.length > 0 ? registeredActivities[selectedActivityIndex] : null
+	);
 
 	// Generate tracking journey steps dynamically based on selected activity status
 	let journeySteps = $derived.by<JourneyStep[]>(() => {
+		if (!selectedActivity) return [];
 		const status = selectedActivity.status;
 		const baseSteps = [
 			{ label: 'Enrolled', subtext: 'Registered for the activity' },
@@ -216,52 +244,52 @@
 
 		if (status === 'Registered') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'current' },
-				{ ...baseSteps[2], status: 'pending' },
-				{ ...baseSteps[3], status: 'pending' },
-				{ ...baseSteps[4], status: 'pending' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'current' as const },
+				{ ...baseSteps[2], status: 'pending' as const },
+				{ ...baseSteps[3], status: 'pending' as const },
+				{ ...baseSteps[4], status: 'pending' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Completed') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'current' },
-				{ ...baseSteps[4], status: 'pending' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'current' as const },
+				{ ...baseSteps[4], status: 'pending' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Pending Verification') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
-				{ ...baseSteps[4], status: 'current' },
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
+				{ ...baseSteps[4], status: 'current' as const },
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		} else if (status === 'Verified') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
-				{ ...baseSteps[4], status: 'completed' },
-				{ ...baseSteps[5], status: 'current' }
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
+				{ ...baseSteps[4], status: 'completed' as const },
+				{ ...baseSteps[5], status: 'current' as const }
 			];
 		} else if (status === 'Rejected') {
 			return [
-				{ ...baseSteps[0], status: 'completed' },
-				{ ...baseSteps[1], status: 'completed' },
-				{ ...baseSteps[2], status: 'completed' },
-				{ ...baseSteps[3], status: 'completed' },
+				{ ...baseSteps[0], status: 'completed' as const },
+				{ ...baseSteps[1], status: 'completed' as const },
+				{ ...baseSteps[2], status: 'completed' as const },
+				{ ...baseSteps[3], status: 'completed' as const },
 				{
 					label: 'Verification Rejected',
 					subtext: 'Certificate rejected during audit',
 					status: 'current' as const
 				},
-				{ ...baseSteps[5], status: 'pending' }
+				{ ...baseSteps[5], status: 'pending' as const }
 			];
 		}
 
@@ -310,8 +338,10 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">12</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight"
+					>{registeredActivities.length}</span
+				>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Total Enrollments</span
 				>
 			</div>
@@ -340,8 +370,10 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">4</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight"
+					>{upcomingActivities.length}</span
+				>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Upcoming Activities</span
 				>
 			</div>
@@ -370,8 +402,11 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">6</span>
-				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight"
+					>{registeredActivities.filter((a) => a.status === 'Completed' || a.status === 'Verified')
+						.length}</span
+				>
+				<span class="text-xs font-bold text-slate-405 mt-0.5 tracking-wide uppercase"
 					>Completed Activities</span
 				>
 			</div>
@@ -400,7 +435,9 @@
 				</svg>
 			</div>
 			<div class="flex flex-col">
-				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight">2</span>
+				<span class="text-2xl font-bold font-serif text-slate-900 leading-tight"
+					>{stats.pending_certificates}</span
+				>
 				<span class="text-xs font-bold text-slate-400 mt-0.5 tracking-wide uppercase"
 					>Pending Verification</span
 				>
@@ -552,332 +589,350 @@
 	</section>
 
 	<!-- ==================== 3. DOUBLE COLUMN LAYOUT ==================== -->
-	<section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-		<!-- LEFT COLUMN (Journey Tracker & Upcoming list) -->
-		<div class="lg:col-span-8 space-y-6 flex flex-col">
-			<!-- A. Participation Journey -->
-			<div
-				class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex-grow flex flex-col"
-			>
-				<div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-5">
-					<div>
-						<h2 class="text-base font-bold font-serif text-[#0B1535]">Participation Journey</h2>
-						<p class="text-[10.5px] font-bold text-slate-405 mt-1 uppercase tracking-wide">
-							{selectedActivity.name} - Tracking Status
-						</p>
+	{#if selectedActivity}
+		<section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+			<!-- LEFT COLUMN (Journey Tracker & Upcoming list) -->
+			<div class="lg:col-span-8 space-y-6 flex flex-col">
+				<!-- A. Participation Journey -->
+				<div
+					class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex-grow flex flex-col"
+				>
+					<div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-5">
+						<div>
+							<h2 class="text-base font-bold font-serif text-[#0B1535]">Participation Journey</h2>
+							<p class="text-[10.5px] font-bold text-slate-405 mt-1 uppercase tracking-wide">
+								{selectedActivity.name} - Tracking Status
+							</p>
+						</div>
+						<span
+							class="px-2 py-0.5 bg-[#881B1B]/10 text-[#881B1B] text-[10px] font-extrabold uppercase rounded-sm tracking-wide"
+						>
+							Active Tracking
+						</span>
 					</div>
-					<span
-						class="px-2 py-0.5 bg-[#881B1B]/10 text-[#881B1B] text-[10px] font-extrabold uppercase rounded-sm tracking-wide"
-					>
-						Active Tracking
-					</span>
-				</div>
 
-				<!-- Vertical Timeline -->
-				<div class="space-y-6 relative pl-3.5 my-2 flex-grow flex flex-col justify-center">
-					<!-- Vertical Line connector -->
-					<div class="absolute left-6.5 top-2.5 bottom-2.5 w-0.5 bg-slate-100"></div>
+					<!-- Vertical Timeline -->
+					<div class="space-y-6 relative pl-3.5 my-2 flex-grow flex flex-col justify-center">
+						<!-- Vertical Line connector -->
+						<div class="absolute left-6.5 top-2.5 bottom-2.5 w-0.5 bg-slate-100"></div>
 
-					{#each journeySteps as step}
-						<div class="flex items-start gap-4 relative z-10">
-							<!-- Timeline Indicator Dot -->
-							<div
-								class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border bg-white mt-0.5
+						{#each journeySteps as step}
+							<div class="flex items-start gap-4 relative z-10">
+								<!-- Timeline Indicator Dot -->
+								<div
+									class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border bg-white mt-0.5
 								{step.status === 'completed' ? 'border-[#0B1535] bg-[#0B1535] text-white' : ''}
 								{step.status === 'current' ? 'border-2 border-[#0B1535] bg-white text-[#0B1535]' : ''}
 								{step.status === 'pending' ? 'border-slate-200 bg-white text-slate-300' : ''}"
-							>
-								{#if step.status === 'completed'}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="3"
-										stroke="currentColor"
-										class="w-3.5 h-3.5"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M4.5 12.75l6 6 9-13.5"
-										/>
-									</svg>
-								{:else if step.status === 'current'}
-									<span class="w-1.5 h-1.5 bg-[#0B1535] rounded-full animate-ping"></span>
-								{:else}
-									<span class="w-1 h-1 bg-slate-200 rounded-full"></span>
-								{/if}
-							</div>
+								>
+									{#if step.status === 'completed'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="3"
+											stroke="currentColor"
+											class="w-3.5 h-3.5"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M4.5 12.75l6 6 9-13.5"
+											/>
+										</svg>
+									{:else if step.status === 'current'}
+										<span class="w-1.5 h-1.5 bg-[#0B1535] rounded-full animate-ping"></span>
+									{:else}
+										<span class="w-1 h-1 bg-slate-200 rounded-full"></span>
+									{/if}
+								</div>
 
-							<!-- Timeline Label -->
-							<div class="flex-grow flex items-start justify-between min-w-0">
-								<div>
-									<h4
-										class="text-xs font-bold leading-tight
+								<!-- Timeline Label -->
+								<div class="flex-grow flex items-start justify-between min-w-0">
+									<div>
+										<h4
+											class="text-xs font-bold leading-tight
 										{step.status === 'completed' || step.status === 'current' ? 'text-[#0B1535]' : 'text-slate-400'}"
-									>
-										{step.label}
-									</h4>
-									<p class="text-[10px] font-medium text-slate-400 mt-0.5 leading-relaxed truncate">
-										{step.subtext}
-									</p>
-								</div>
-
-								{#if step.status === 'current'}
-									<span
-										class="shrink-0 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200/50 text-[8px] font-extrabold uppercase rounded-xs tracking-wider"
-									>
-										Current
-									</span>
-								{/if}
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
-
-			<!-- B. Upcoming Activities List -->
-			<div class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs">
-				<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-					<h2 class="text-base font-bold font-serif text-[#0B1535]">Upcoming Activities</h2>
-					<span
-						class="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[9px] font-extrabold uppercase tracking-wide"
-					>
-						Active Registration
-					</span>
-				</div>
-
-				<div class="divide-y divide-slate-100">
-					{#each upcomingActivities as activity}
-						<div class="py-3.5 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
-							<div class="flex items-center gap-3.5 min-w-0">
-								<!-- Icon -->
-								<div
-									class="w-10 h-10 rounded-lg bg-blue-50/80 border border-blue-100/50 flex items-center justify-center text-blue-600 shrink-0"
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="2"
-										stroke="currentColor"
-										class="w-5 h-5"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
-										/>
-									</svg>
-								</div>
-
-								<div class="min-w-0">
-									<h4 class="text-xs font-bold text-slate-800 leading-tight truncate">
-										{activity.name}
-									</h4>
-									<div
-										class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-405 font-semibold font-sans"
-									>
-										<span class="flex items-center gap-1">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-												stroke="currentColor"
-												class="w-3 h-3 text-slate-400"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
-												/>
-											</svg>
-											{activity.date} @ {activity.time}
-										</span>
-										<span class="text-slate-300">•</span>
-										<span class="flex items-center gap-1">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-												stroke="currentColor"
-												class="w-3 h-3 text-slate-400"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
-												/>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
-												/>
-											</svg>
-											{activity.venue}
-										</span>
+										>
+											{step.label}
+										</h4>
+										<p
+											class="text-[10px] font-medium text-slate-400 mt-0.5 leading-relaxed truncate"
+										>
+											{step.subtext}
+										</p>
 									</div>
-								</div>
-							</div>
 
-							<div class="text-right shrink-0 flex flex-col items-end">
-								<span class="text-xs font-extrabold text-[#881B1B]">{activity.credits} Credits</span
-								>
-								<span
-									class="text-[9.5px] font-bold text-slate-400 block mt-1 uppercase tracking-wide"
-									>{activity.daysLeft}</span
-								>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
-		</div>
-
-		<!-- RIGHT COLUMN (Credit Summary & Updates list) -->
-		<div class="lg:col-span-4 space-y-6 flex flex-col">
-			<!-- A. Enrollment Credit Summary -->
-			<div
-				class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex flex-col justify-between"
-			>
-				<div>
-					<h2 class="text-base font-bold font-serif text-[#0B1535] pb-4 border-b border-slate-100">
-						Enrollment Credit Summary
-					</h2>
-
-					<!-- Category progress list -->
-					<div class="space-y-4 my-5">
-						{#each creditCategorySummaries as cat}
-							<div class="space-y-1.5">
-								<div class="flex justify-between text-xs font-bold text-slate-800">
-									<span class="text-[10px] font-extrabold text-slate-405 uppercase tracking-wide"
-										>{cat.category}</span
-									>
-									<span class="text-slate-900">{cat.creditsEarned} Credits</span>
-								</div>
-								<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-									<div
-										class="h-full bg-[#0B1535] rounded-full"
-										style="width: {cat.percentage}%"
-									></div>
+									{#if step.status === 'current'}
+										<span
+											class="shrink-0 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200/50 text-[8px] font-extrabold uppercase rounded-xs tracking-wider"
+										>
+											Current
+										</span>
+									{/if}
 								</div>
 							</div>
 						{/each}
 					</div>
 				</div>
 
-				<div class="border-t border-slate-150 pt-5 mt-2">
-					<div class="flex justify-between text-xs font-extrabold text-slate-800 mb-2">
-						<span class="text-[11px] font-extrabold text-[#0B1535] uppercase tracking-wide"
-							>Total Credits vs Required</span
+				<!-- B. Upcoming Activities List -->
+				<div class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs">
+					<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+						<h2 class="text-base font-bold font-serif text-[#0B1535]">Upcoming Activities</h2>
+						<span
+							class="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[9px] font-extrabold uppercase tracking-wide"
 						>
-						<span class="text-[#881B1B]">118 / 200</span>
+							Active Registration
+						</span>
 					</div>
-					<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-						<div class="h-full bg-[#881B1B] rounded-full" style="width: 59%"></div>
-					</div>
-					<div
-						class="flex justify-end text-[10px] font-extrabold text-[#881B1B] mt-1.5 uppercase tracking-wide"
-					>
-						59% Complete
+
+					<div class="divide-y divide-slate-100">
+						{#each upcomingActivities as activity}
+							<div class="py-3.5 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
+								<div class="flex items-center gap-3.5 min-w-0">
+									<!-- Icon -->
+									<div
+										class="w-10 h-10 rounded-lg bg-blue-50/80 border border-blue-100/50 flex items-center justify-center text-blue-600 shrink-0"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+											stroke="currentColor"
+											class="w-5 h-5"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
+											/>
+										</svg>
+									</div>
+
+									<div class="min-w-0">
+										<h4 class="text-xs font-bold text-slate-800 leading-tight truncate">
+											{activity.name}
+										</h4>
+										<div
+											class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-405 font-semibold font-sans"
+										>
+											<span class="flex items-center gap-1">
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="w-3 h-3 text-slate-400"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+													/>
+												</svg>
+												{activity.date} @ {activity.time}
+											</span>
+											<span class="text-slate-300">•</span>
+											<span class="flex items-center gap-1">
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="w-3 h-3 text-slate-400"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+													/>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+													/>
+												</svg>
+												{activity.venue}
+											</span>
+										</div>
+									</div>
+								</div>
+
+								<div class="text-right shrink-0 flex flex-col items-end">
+									<span class="text-xs font-extrabold text-[#881B1B]"
+										>{activity.credits} Credits</span
+									>
+									<span
+										class="text-[9.5px] font-bold text-slate-400 block mt-1 uppercase tracking-wide"
+										>{activity.daysLeft}</span
+									>
+								</div>
+							</div>
+						{/each}
 					</div>
 				</div>
 			</div>
 
-			<!-- B. Recent Enrollment Updates -->
-			<div
-				class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex-grow flex flex-col"
-			>
-				<h2
-					class="text-base font-bold font-serif text-[#0B1535] pb-4 border-b border-slate-100 mb-4"
+			<!-- RIGHT COLUMN (Credit Summary & Updates list) -->
+			<div class="lg:col-span-4 space-y-6 flex flex-col">
+				<!-- A. Enrollment Credit Summary -->
+				<div
+					class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex flex-col justify-between"
 				>
-					Recent Enrollment Updates
-				</h2>
+					<div>
+						<h2
+							class="text-base font-bold font-serif text-[#0B1535] pb-4 border-b border-slate-100"
+						>
+							Enrollment Credit Summary
+						</h2>
 
-				<div class="space-y-4.5 my-2 flex-grow flex flex-col justify-center">
-					{#each recentUpdates as update}
-						<div class="flex items-start gap-3">
-							<!-- Circle status indicator icon -->
+						<!-- Category progress list -->
+						<div class="space-y-4 my-5">
+							{#each creditCategorySummaries as cat}
+								<div class="space-y-1.5">
+									<div class="flex justify-between text-xs font-bold text-slate-800">
+										<span class="text-[10px] font-extrabold text-slate-405 uppercase tracking-wide"
+											>{cat.category}</span
+										>
+										<span class="text-slate-900">{cat.creditsEarned} Credits</span>
+									</div>
+									<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+										<div
+											class="h-full bg-[#0B1535] rounded-full"
+											style="width: {cat.percentage}%"
+										></div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<div class="border-t border-slate-150 pt-5 mt-2">
+						<div class="flex justify-between text-xs font-extrabold text-slate-800 mb-2">
+							<span class="text-[11px] font-extrabold text-[#0B1535] uppercase tracking-wide"
+								>Total Credits vs Required</span
+							>
+							<span class="text-[#881B1B]">{totalCreditsEarned} / 200</span>
+						</div>
+						<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
 							<div
-								class="w-8 h-8 rounded-full border flex items-center justify-center shrink-0
+								class="h-full bg-[#881B1B] rounded-full"
+								style="width: {totalCreditsPercentage}%"
+							></div>
+						</div>
+						<div
+							class="flex justify-end text-[10px] font-extrabold text-[#881B1B] mt-1.5 uppercase tracking-wide"
+						>
+							{totalCreditsPercentage}% Complete
+						</div>
+					</div>
+				</div>
+
+				<!-- B. Recent Enrollment Updates -->
+				<div
+					class="bg-white border border-slate-200 p-6 rounded-xl shadow-xs flex-grow flex flex-col"
+				>
+					<h2
+						class="text-base font-bold font-serif text-[#0B1535] pb-4 border-b border-slate-100 mb-4"
+					>
+						Recent Enrollment Updates
+					</h2>
+
+					<div class="space-y-4.5 my-2 flex-grow flex flex-col justify-center">
+						{#each recentUpdates as update}
+							<div class="flex items-start gap-3">
+								<!-- Circle status indicator icon -->
+								<div
+									class="w-8 h-8 rounded-full border flex items-center justify-center shrink-0
 								{update.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : ''}
 								{update.type === 'star' ? 'bg-blue-50 border-blue-100 text-blue-600' : ''}
 								{update.type === 'doc' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : ''}
 								{update.type === 'db' ? 'bg-blue-50 border-blue-100 text-blue-600' : ''}"
-							>
-								{#if update.type === 'success'}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="2.5"
-										stroke="currentColor"
-										class="w-4 h-4"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-								{:else if update.type === 'star'}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="2.2"
-										stroke="currentColor"
-										class="w-4 h-4"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M11.48 3.499c.174-.627 1.06-.627 1.234 0l1.63 4.887a1 1 0 00.95.69h5.132c.656 0 .928.843.429 1.26l-4.153 3.493a1 1 0 00-.342 1.053l1.63 4.887c.174.627-.587 1.181-1.129.782l-4.154-3.493a1 1 0 00-1.17 0l-4.154 3.493c-.542.399-1.303-.155-1.129-.782l1.63-4.887a1 1 0 00-.342-1.053L2.42 10.336c-.498-.417-.226-1.26.429-1.26H7.98a1 1 0 00.95-.69l1.63-4.887z"
-										/>
-									</svg>
-								{:else if update.type === 'doc'}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="2.2"
-										stroke="currentColor"
-										class="w-4 h-4"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-								{:else}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="2.2"
-										stroke="currentColor"
-										class="w-4 h-4"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75"
-										/>
-									</svg>
-								{/if}
-							</div>
+								>
+									{#if update.type === 'success'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2.5"
+											stroke="currentColor"
+											class="w-4 h-4"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+									{:else if update.type === 'star'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2.2"
+											stroke="currentColor"
+											class="w-4 h-4"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M11.48 3.499c.174-.627 1.06-.627 1.234 0l1.63 4.887a1 1 0 00.95.69h5.132c.656 0 .928.843.429 1.26l-4.153 3.493a1 1 0 00-.342 1.053l1.63 4.887c.174.627-.587 1.181-1.129.782l-4.154-3.493a1 1 0 00-1.17 0l-4.154 3.493c-.542.399-1.303-.155-1.129-.782l1.63-4.887a1 1 0 00-.342-1.053L2.42 10.336c-.498-.417-.226-1.26.429-1.26H7.98a1 1 0 00.95-.69l1.63-4.887z"
+											/>
+										</svg>
+									{:else if update.type === 'doc'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2.2"
+											stroke="currentColor"
+											class="w-4 h-4"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+											/>
+										</svg>
+									{:else}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2.2"
+											stroke="currentColor"
+											class="w-4 h-4"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75"
+											/>
+										</svg>
+									{/if}
+								</div>
 
-							<div class="min-w-0">
-								<p class="text-xs text-slate-700 font-semibold leading-relaxed">{update.text}</p>
-								<span class="text-[10px] text-slate-400 block mt-0.5">{update.time}</span>
+								<div class="min-w-0">
+									<p class="text-xs text-slate-700 font-semibold leading-relaxed">{update.text}</p>
+									<span class="text-[10px] text-slate-400 block mt-0.5">{update.time}</span>
+								</div>
 							</div>
-						</div>
-					{/each}
+						{/each}
+					</div>
 				</div>
 			</div>
+		</section>
+	{:else}
+		<div
+			class="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-2xl mx-auto my-6 shadow-xs"
+		>
+			<p class="text-xs text-slate-500 font-bold font-sans">
+				No enrolled activities to display tracking details.
+			</p>
 		</div>
-	</section>
+	{/if}
 </div>

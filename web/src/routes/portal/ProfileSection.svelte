@@ -1,28 +1,67 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { API_BASE_URL } from '$lib/config';
 
-	// Mock Profile State
+	let token = localStorage.getItem('access_token') || '';
+
+	function capitalizeWords(str: string) {
+		if (!str) return '';
+		return str.toLowerCase().replace(/\b[a-z]/g, (char) => char.toUpperCase());
+	}
+
+	// Profile State
 	let profile = $state({
-		name: 'Rahul Verma',
-		rollNo: 'CSE-2K23-78',
-		enrollmentNo: 'DX7890543',
-		email: 'rahul.iips@gmail.com',
-		mobile: '+91 98765 43210',
+		name: '',
+		rollNo: '',
+		enrollmentNo: '',
+		email: '',
+		mobile: '',
 		dob: '-',
-		gender: 'Male',
-		course: 'B.Tech',
-		program: 'Computer Science & Engg.',
-		semester: 'Semester 6',
-		batch: '2021 - 2025',
-		department: 'Computer Science',
+		gender: '-',
+		course: '',
+		program: 'Professional Studies',
+		semester: '',
+		batch: '2021 - 2026',
+		department: 'IIPS DAVV',
 		institute: 'IIPS, DAVV',
 		status: 'Active Student',
 		verified: true,
 		photoUrl: '', // Empty for now, missing photo
 		emailVerified: true,
 		phoneVerified: true,
-		lastLogin: 'Today, 09:42 AM',
-		lastPasswordChange: '12 Jun 2025'
+		lastLogin: 'Today',
+		lastPasswordChange: '-'
+	});
+
+	async function loadProfile() {
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				const s = data.student;
+				profile.name = capitalizeWords(s.name);
+				profile.rollNo = s.roll_no;
+				profile.enrollmentNo = s.enrollment_no;
+				profile.email = s.email_id;
+				profile.mobile = s.contact_no;
+				profile.dob = s.dob || '-';
+				profile.gender = s.gender || '-';
+				profile.course = s.course_name;
+				profile.semester = `Semester ${s.semester}`;
+				profile.verified = s.is_verified;
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
+
+	$effect(() => {
+		loadProfile();
 	});
 
 	// UI Interactive States
@@ -66,18 +105,44 @@
 		editForm.email = profile.email;
 		editForm.mobile = profile.mobile;
 		editForm.dob = profile.dob === '-' ? '' : profile.dob;
-		editForm.gender = profile.gender;
+		editForm.gender = profile.gender === '-' ? '' : profile.gender;
 		isEditing = true;
 	}
 
-	// Save edit form
-	function handleSaveEdit(e: Event) {
+	// Save edit form to backend
+	async function handleSaveEdit(e: Event) {
 		e.preventDefault();
-		profile.email = editForm.email;
-		profile.mobile = editForm.mobile;
-		profile.dob = editForm.dob ? editForm.dob : '-';
-		profile.gender = editForm.gender;
-		isEditing = false;
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/profile`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify({
+					email_id: editForm.email,
+					contact_no: editForm.mobile,
+					dob: editForm.dob,
+					gender: editForm.gender
+				})
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				const s = data.student;
+				profile.email = s.email_id;
+				profile.mobile = s.contact_no;
+				profile.dob = s.dob || '-';
+				profile.gender = s.gender || '-';
+				isEditing = false;
+			} else {
+				const errData = await res.json();
+				alert(errData.error || 'Failed to update profile');
+			}
+		} catch (err) {
+			console.error(err);
+			alert('Error updating profile');
+		}
 	}
 
 	// Cancel edit mode
@@ -85,10 +150,12 @@
 		isEditing = false;
 	}
 
-	// Handle password submission
-	function handlePasswordSubmit(e: Event) {
+	// Handle password submission to backend
+	async function handlePasswordSubmit(e: Event) {
 		e.preventDefault();
 		passwordError = '';
+		passwordSuccess = false;
+
 		if (passwordForm.newPassword !== passwordForm.confirmPassword) {
 			passwordError = 'Passwords do not match.';
 			return;
@@ -98,29 +165,68 @@
 			return;
 		}
 
-		// Success flow
-		passwordSuccess = true;
-		profile.lastPasswordChange = new Date().toLocaleDateString('en-GB', {
-			day: 'numeric',
-			month: 'short',
-			year: 'numeric'
-		});
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/change-password`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify({
+					current_password: passwordForm.currentPassword,
+					new_password: passwordForm.newPassword
+				})
+			});
 
-		setTimeout(() => {
-			showPasswordModal = false;
-			passwordSuccess = false;
-			passwordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-		}, 1500);
+			if (res.ok) {
+				passwordSuccess = true;
+				profile.lastPasswordChange = new Date().toLocaleDateString('en-GB', {
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric'
+				});
+
+				setTimeout(() => {
+					showPasswordModal = false;
+					passwordSuccess = false;
+					passwordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
+				}, 1500);
+			} else {
+				const errData = await res.json();
+				passwordError = errData.error || 'Failed to change password.';
+			}
+		} catch (err) {
+			console.error(err);
+			passwordError = 'Error changing password.';
+		}
 	}
 
 	// Complete profile automatically / quick fix
-	function handleCompleteProfile() {
-		if (profile.dob === '-') {
-			profile.dob = '2004-10-15';
-		}
-		if (!profile.photoUrl) {
-			profile.photoUrl =
-				'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=120'; // Mock avatar
+	async function handleCompleteProfile() {
+		try {
+			const body: { dob?: string } = {};
+			if (profile.dob !== '-') {
+				body.dob = profile.dob;
+			}
+			const res = await fetch(`${API_BASE_URL}/api/student/profile`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify(body)
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				profile.dob = data.student.dob || '-';
+				if (!profile.photoUrl) {
+					profile.photoUrl =
+						'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=120'; // Mock avatar
+				}
+			}
+		} catch (e) {
+			console.error(e);
 		}
 	}
 </script>

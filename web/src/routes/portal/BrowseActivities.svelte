@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
+	import { SvelteDate } from 'svelte/reactivity';
 
 	// Define interfaces for activities
 	interface Activity {
@@ -10,6 +11,7 @@
 		credits: number;
 		mode: string;
 		regDeadline: string;
+		regDeadlineRaw: string;
 		activityDate: string;
 		venue: string;
 		coordinator: string;
@@ -17,189 +19,194 @@
 		daysLeft?: string;
 	}
 
-	// Mock list of activities
-	const allActivities: Activity[] = [
-		{
-			id: 1,
-			name: 'National Hackathon 2026',
-			category: 'TECHNICAL',
-			description:
-				'A 36-hour coding challenge open to all undergraduate students. Build innovative solutions for real-world problems across domains.',
-			credits: 15,
-			mode: 'Offline',
-			regDeadline: '30 June 2026',
-			activityDate: '5 July 2026',
-			venue: 'IIPS Auditorium',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Closing Soon',
-			daysLeft: '3d left'
-		},
-		{
-			id: 2,
-			name: 'Inter-College Athletics Meet',
-			category: 'SPORTS',
-			description:
-				'Annual inter-college athletics championship. Compete in track and field events representing IIPS at the university level.',
-			credits: 10,
-			mode: 'Offline',
-			regDeadline: '25 June 2026',
-			activityDate: '8 July 2026',
-			venue: 'DAVV Sports Ground',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Open',
-			daysLeft: '7d left'
-		},
-		{
-			id: 3,
-			name: 'National Science Olympiad',
-			category: 'RESEARCH',
-			description:
-				'Prestigious national-level science competition covering physics, chemistry, and biology. Written exam followed by practical rounds.',
-			credits: 20,
-			mode: 'Hybrid',
-			regDeadline: '15 July 2026',
-			activityDate: '20 July 2026',
-			venue: 'IIPS Seminar Hall',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Open'
-		},
-		{
-			id: 4,
-			name: 'Inter College Debate Championship',
-			category: 'PUBLIC SPEAKING',
-			description:
-				'Parliamentary-style debate on contemporary socio-political topics. Individual and team participation categories available.',
-			credits: 12,
-			mode: 'Offline',
-			regDeadline: '28 June 2026',
-			activityDate: '3 July 2026',
-			venue: 'IIPS Conference Hall',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Closing Soon',
-			daysLeft: '5d left'
-		},
-		{
-			id: 5,
-			name: 'Blood Donation Camp',
-			category: 'SOCIAL SERVICE',
-			description:
-				'Community health initiative in partnership with District Hospital Indore. Volunteers earn certified social service credit.',
-			credits: 8,
-			mode: 'Offline',
-			regDeadline: '22 June 2026',
-			activityDate: '1 July 2026',
-			venue: 'IIPS Main Ground',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Closed',
-			daysLeft: '9d left'
-		},
-		{
-			id: 6,
-			name: 'Annual Cultural Fest — Dance',
-			category: 'CULTURAL',
-			description:
-				'Classical and contemporary dance competition as part of the Annual Cultural Festival. Solo and group categories.',
-			credits: 10,
-			mode: 'Offline',
-			regDeadline: '10 July 2026',
-			activityDate: '18 July 2026',
-			venue: 'Open Air Theatre, DAVV',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Open'
-		},
-		{
-			id: 7,
-			name: 'AI & Machine Learning Bootcamp',
-			category: 'TECHNICAL',
-			description:
-				'Hands-on bootcamp on deep learning, generative AI models, and model tuning. Earn certificates and practical project credits.',
-			credits: 15,
-			mode: 'Online',
-			regDeadline: '12 July 2026',
-			activityDate: '16 July 2026',
-			venue: 'Google Meet',
-			coordinator: 'Dr. Sanjay Tanwani',
-			status: 'Open'
-		},
-		{
-			id: 8,
-			name: 'Swachh Bharat Cleanliness Drive',
-			category: 'SOCIAL SERVICE',
-			description:
-				'Campus-wide cleanliness and awareness drive. Volunteer to help make IIPS and DAVV plastic-free zones.',
-			credits: 6,
-			mode: 'Offline',
-			regDeadline: '05 July 2026',
-			activityDate: '07 July 2026',
-			venue: 'DAVV Campus',
-			coordinator: 'Dr. K. K. Pandey',
-			status: 'Open'
-		},
-		{
-			id: 9,
-			name: 'NSS Youth Leadership Summit',
-			category: 'LEADERSHIP',
-			description:
-				'A leadership workshop teaching communication, organizing skills, and social responsibility principles.',
-			credits: 10,
-			mode: 'Offline',
-			regDeadline: '14 July 2026',
-			activityDate: '18 July 2026',
-			venue: 'DAVV Auditorium',
-			coordinator: 'Prof. Anjali Sharma',
-			status: 'Open'
-		}
-	];
+	import { API_BASE_URL } from '$lib/config';
 
-	// Right sidebar registration deadlines data
-	const deadlines = [
-		{ name: 'Hackathon 2026', days: '3d left', color: 'bg-rose-50 text-rose-700 border-rose-100' },
-		{
-			name: 'Debate Championship',
-			days: '5d left',
-			color: 'bg-amber-50 text-amber-700 border-amber-100'
-		},
-		{
-			name: 'Athletics Meet',
-			days: '7d left',
-			color: 'bg-emerald-50 text-emerald-700 border-emerald-100'
-		},
-		{
-			name: 'Blood Donation Camp',
-			days: '9d left',
-			color: 'bg-blue-50 text-blue-700 border-blue-100'
-		}
-	];
+	interface BackendActivity {
+		id: number;
+		name: string;
+		category: string;
+		description: string;
+		credits: number;
+		mode: string;
+		reg_deadline: string;
+		activity_date: string;
+		venue: string;
+		coordinator: string;
+		status: 'Open' | 'Closed' | 'Closing Soon';
+	}
 
-	// Right sidebar categories counts
-	const categoriesCounts = [
-		{ name: 'Technical', count: 8, dotColor: 'bg-blue-600' },
-		{ name: 'Research', count: 5, dotColor: 'bg-purple-600' },
-		{ name: 'Sports', count: 6, dotColor: 'bg-emerald-600' },
-		{ name: 'Cultural', count: 4, dotColor: 'bg-pink-600' },
-		{ name: 'Leadership', count: 3, dotColor: 'bg-teal-600' },
-		{ name: 'Social Service', count: 4, dotColor: 'bg-rose-600' },
-		{ name: 'Public Speaking', count: 4, dotColor: 'bg-amber-600' }
-	];
+	interface BackendEnrollment {
+		activity_id: number;
+	}
 
-	// Enrollment interactive states
+	let token = localStorage.getItem('access_token') || '';
+	let allActivities = $state<Activity[]>([]);
 	let enrolledIds = $state<number[]>([]);
+	let stats = $state({
+		activities_participated: 0,
+		certificates_uploaded: 0,
+		pending_certificates: 0,
+		credits_earned: 0
+	});
 
-	// Base stats
-	const baseEnrolledCount = 3;
-	const basePendingCount = 1;
-	const baseCompletedCount = 8;
-	const baseCreditsEarned = 82;
+	function formatDate(dateStr: string) {
+		if (!dateStr) return '';
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		});
+	}
+
+	async function loadActivitiesData() {
+		try {
+			// Fetch activities
+			const actRes = await fetch(`${API_BASE_URL}/api/student/activities`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (actRes.ok) {
+				const data = (await actRes.json()) as BackendActivity[];
+				allActivities = (data || []).map((item) => ({
+					id: item.id,
+					name: item.name,
+					category: item.category,
+					description: item.description,
+					credits: item.credits,
+					mode: item.mode,
+					regDeadline: formatDate(item.reg_deadline),
+					regDeadlineRaw: item.reg_deadline,
+					activityDate: formatDate(item.activity_date),
+					venue: item.venue,
+					coordinator: item.coordinator,
+					status: item.status
+				}));
+			}
+
+			// Fetch enrollments
+			const enrollRes = await fetch(`${API_BASE_URL}/api/student/enrollments`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (enrollRes.ok) {
+				const enrollmentsData = (await enrollRes.json()) as BackendEnrollment[];
+				enrolledIds = (enrollmentsData || []).map((e) => e.activity_id);
+			}
+
+			// Fetch stats
+			const statsRes = await fetch(`${API_BASE_URL}/api/student/dashboard/stats`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (statsRes.ok) {
+				stats = await statsRes.json();
+			}
+		} catch (err) {
+			console.error('Error fetching activities:', err);
+		}
+	}
+
+	$effect(() => {
+		loadActivitiesData();
+	});
 
 	// Derived stats responsive to enrollments
-	let enrolledCount = $derived(baseEnrolledCount + enrolledIds.length);
-	let creditsEarned = $derived(
-		baseCreditsEarned +
-			enrolledIds.reduce((total, id) => {
-				const act = allActivities.find((a) => a.id === id);
-				return total + (act ? act.credits : 0);
-			}, 0)
-	);
+	let enrolledCount = $derived(enrolledIds.length);
+	let creditsEarned = $derived(stats.credits_earned);
+	let pendingCount = $derived(stats.pending_certificates);
+	let completedCount = $derived(stats.activities_participated);
+
+	// Dynamic registration deadlines (Open / Closing Soon activities sorted by deadline)
+	let deadlines = $derived.by(() => {
+		const today = new SvelteDate();
+		today.setHours(0, 0, 0, 0);
+
+		return allActivities
+			.filter((a) => a.status === 'Open' || a.status === 'Closing Soon')
+			.map((a) => {
+				const deadlineDate = new SvelteDate(a.regDeadlineRaw);
+				deadlineDate.setHours(0, 0, 0, 0);
+				const diffTime = deadlineDate.getTime() - today.getTime();
+				const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+				let daysStr: string;
+				let colorClass = 'bg-slate-50 text-slate-700 border-slate-100';
+
+				if (diffDays < 0) {
+					daysStr = 'Closed';
+				} else if (diffDays === 0) {
+					daysStr = 'Today';
+					colorClass = 'bg-rose-50 text-rose-700 border-rose-100';
+				} else {
+					daysStr = `${diffDays}d left`;
+					if (diffDays <= 3) {
+						colorClass = 'bg-rose-50 text-rose-700 border-rose-100';
+					} else if (diffDays <= 7) {
+						colorClass = 'bg-amber-50 text-amber-700 border-amber-100';
+					} else {
+						colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+					}
+				}
+
+				return {
+					name: a.name,
+					days: daysStr,
+					color: colorClass,
+					rawDays: diffDays
+				};
+			})
+			.filter((a) => a.rawDays >= 0)
+			.sort((a, b) => a.rawDays - b.rawDays)
+			.slice(0, 4);
+	});
+
+	// Categories dot color mappings
+	const categoryColors: Record<string, string> = {
+		TECHNICAL: 'bg-blue-600',
+		RESEARCH: 'bg-purple-600',
+		SPORTS: 'bg-emerald-600',
+		CULTURAL: 'bg-pink-600',
+		LEADERSHIP: 'bg-teal-600',
+		'SOCIAL SERVICE': 'bg-rose-600',
+		'PUBLIC SPEAKING': 'bg-amber-600'
+	};
+
+	// Dynamic category counts from allActivities
+	let categoriesCounts = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		allActivities.forEach((a) => {
+			const catUpper = a.category.toUpperCase();
+			counts[catUpper] = (counts[catUpper] || 0) + 1;
+		});
+
+		const order = [
+			'TECHNICAL',
+			'RESEARCH',
+			'SPORTS',
+			'CULTURAL',
+			'LEADERSHIP',
+			'SOCIAL SERVICE',
+			'PUBLIC SPEAKING'
+		];
+		const extra = Object.keys(counts).filter((c) => !order.includes(c));
+		const finalOrder = [...order, ...extra];
+
+		return finalOrder.map((catUpper) => {
+			const name = catUpper
+				.split(' ')
+				.map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+				.join(' ');
+			return {
+				name,
+				count: counts[catUpper] || 0,
+				dotColor: categoryColors[catUpper] || 'bg-slate-600'
+			};
+		});
+	});
 
 	// Filters State
 	let showFilters = $state(true);
@@ -292,11 +299,38 @@
 		handleApplyFilters();
 	}
 
-	function toggleEnrollment(id: number) {
+	async function toggleEnrollment(id: number) {
 		if (enrolledIds.includes(id)) {
-			enrolledIds = enrolledIds.filter((itemId) => itemId !== id);
-		} else {
-			enrolledIds = [...enrolledIds, id];
+			// Already enrolled, no action needed in this mode
+			return;
+		}
+
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/activities/${id}/enroll`, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (res.ok) {
+				enrolledIds = [...enrolledIds, id];
+				// Refresh statistics
+				const statsRes = await fetch(`${API_BASE_URL}/api/student/dashboard/stats`, {
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				});
+				if (statsRes.ok) {
+					stats = await statsRes.json();
+				}
+			} else {
+				const errData = await res.json();
+				alert(errData.error || 'Failed to enroll');
+			}
+		} catch (err) {
+			console.error(err);
+			alert('Error enrolling in activity');
 		}
 	}
 
@@ -845,11 +879,11 @@
 				</div>
 				<div class="flex justify-between items-center">
 					<span>Pending Approval</span>
-					<span class="text-slate-900 font-bold">{basePendingCount}</span>
+					<span class="text-slate-900 font-bold">{pendingCount}</span>
 				</div>
 				<div class="flex justify-between items-center">
 					<span>Completed</span>
-					<span class="text-slate-900 font-bold">{baseCompletedCount}</span>
+					<span class="text-slate-900 font-bold">{completedCount}</span>
 				</div>
 				<div class="flex justify-between items-center pt-2 border-t border-slate-100">
 					<span>Credits Earned</span>
