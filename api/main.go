@@ -44,9 +44,6 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Serve uploaded certificates
-	app.Static("/uploads/certificates", "./uploads/certificates")
-
 	// Setup Routes
 	routes.SetupRoutes(app)
 

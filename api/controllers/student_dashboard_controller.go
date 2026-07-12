@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +16,20 @@ import (
 	"github.com/iips-oss/ispark/api/models"
 	"github.com/iips-oss/ispark/api/utils"
 )
+
+const certificateUploadDir = "./uploads/certificates"
+
+// keeping it like this soo that adding more file types in future is easy.
+// If we want to allow more file types, we can just add them here.
+var allowedCertificateTypes = map[string]string{
+	".pdf":  "application/pdf",
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+}
+
+// max certificate file size is 5 MB but i highly doublt that we should keep it 5 MB.
+const maxCertificateSize = 5 * 1024 * 1024
 
 // GetCertificates returns student's uploaded certificates
 func GetCertificates(c *fiber.Ctx) error {
@@ -66,32 +83,10 @@ func UploadCertificate(c *fiber.Ctx) error {
 		issueDate = &parsedDate
 	}
 
-	// Determine credits based on participation type and level
-	credits := 10 // baseline
-	switch participationType {
-	case "Winner", "1st Place":
-		credits = 20
-	case "Runner Up", "2nd Place", "3rd Place":
-		credits = 15
-	case "Participant":
-		credits = 10
-	case "Coordinator", "Organizer":
-		credits = 12
-	case "Volunteer":
-		credits = 8
-	}
-
-	// Adjust credits for level
-	switch eventLevel {
-	case "National":
-		credits += 5
-	case "International":
-		credits += 10
-	}
+	credits := config.CreditsForCertificate(participationType, eventLevel)
 
 	// Handle File Upload
 	file, err := c.FormFile("certificate_file")
-	var fileName, filePath string
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Certificate file is required",
@@ -99,45 +94,41 @@ func UploadCertificate(c *fiber.Ctx) error {
 	}
 
 	// Validate file size (max 5 MB)
-	if file.Size > 5*1024*1024 {
+	if file.Size > maxCertificateSize {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "File size exceeds 5 MB limit",
 		})
 	}
 
-	// Validate file extension/MIME type
-	validTypes := map[string]bool{
-		"application/pdf": true,
-		"image/png":       true,
-		"image/jpeg":      true,
-		"image/jpg":       true,
-	}
-	contentType := file.Header.Get("Content-Type")
 	ext := strings.ToLower(filepath.Ext(file.Filename))
-	validExtensions := map[string]bool{
-		".pdf":  true,
-		".png":  true,
-		".jpg":  true,
-		".jpeg": true,
-	}
-
-	if !validTypes[contentType] && !validExtensions[ext] {
+	expectedType, extAllowed := allowedCertificateTypes[ext]
+	if !extAllowed {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Unsupported file format. Please upload PDF, PNG, or JPG",
 		})
 	}
 
+	detectedType, err := detectFileType(file)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to read uploaded file",
+		})
+	}
+	if detectedType != expectedType {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "File contents do not match its extension. Please upload a valid PDF, PNG, or JPG",
+		})
+	}
+
 	// Ensure directory exists
-	uploadDir := "./uploads/certificates"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+	if err := os.MkdirAll(certificateUploadDir, 0o755); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create upload directory",
 		})
 	}
 
-	// Save file with a unique name
-	fileName = fmt.Sprintf("%s_%d_%s", rollNo, time.Now().UnixNano(), file.Filename)
-	filePath = filepath.Join(uploadDir, fileName)
+	fileName := fmt.Sprintf("%s_%d_%s", rollNo, time.Now().UnixNano(), filepath.Base(file.Filename))
+	filePath := filepath.Join(certificateUploadDir, fileName)
 	if err := c.SaveFile(file, filePath); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to save file",
@@ -172,6 +163,43 @@ func UploadCertificate(c *fiber.Ctx) error {
 		"message":     "Certificate uploaded successfully",
 		"certificate": cert,
 	})
+}
+
+func detectFileType(file *multipart.FileHeader) (string, error) {
+	f, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+
+	head := make([]byte, 512)
+	n, err := f.Read(head)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	return strings.SplitN(http.DetectContentType(head[:n]), ";", 2)[0], nil
+}
+
+// now a student can only download their own certificate files.
+func DownloadCertificate(c *fiber.Ctx) error {
+	rollNo := c.Locals("roll_no").(string)
+
+	var cert models.Certificate
+	if err := config.DB.Where("id = ? AND student_roll_no = ?", c.Params("id"), rollNo).First(&cert).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Certificate not found",
+		})
+	}
+
+	filePath := filepath.Join(certificateUploadDir, filepath.Base(cert.FileName))
+	if _, err := os.Stat(filePath); err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Certificate file is no longer available",
+		})
+	}
+
+	return c.Download(filePath, cert.FileName)
 }
 
 // getAcademicYearDateRange returns start and end date of the academic year

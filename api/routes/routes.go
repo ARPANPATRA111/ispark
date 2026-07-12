@@ -33,6 +33,7 @@ func SetupRoutes(app *fiber.App) {
 	student.Use(middleware.AuthRequired())
 	student.Get("/certificates", controllers.GetCertificates)
 	student.Post("/certificates", controllers.UploadCertificate)
+	student.Get("/certificates/:id/file", controllers.DownloadCertificate)
 	student.Get("/leaderboard/champions", controllers.GetCategoryChampions)
 	student.Get("/leaderboard", controllers.GetLeaderboard)
 	student.Get("/activities", controllers.GetActivities)

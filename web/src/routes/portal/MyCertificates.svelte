@@ -128,12 +128,31 @@
 		activeCert = null;
 	}
 
-	function handleDownload(certId: number | string, filename: string) {
-		// Provide a direct link to the backend serving file if available, or trigger toast
-		triggerToast(`Downloading certificate ${certId} (${filename})...`);
-		// Open the file in a new tab if supported
-		if (filename) {
-			window.open(`${API_BASE_URL}/uploads/certificates/${filename}`, '_blank');
+	async function handleDownload(certId: number | string, filename: string) {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/certificates/${certId}/file`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to download certificate');
+			}
+
+			const blob = await res.blob();
+			const objectUrl = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = objectUrl;
+			link.download = filename || `certificate-${certId}`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(objectUrl);
+
+			triggerToast(`Downloading certificate ${certId} (${filename})...`);
+		} catch {
+			triggerToast('Could not download this certificate. Please try again.');
 		}
 	}
 
