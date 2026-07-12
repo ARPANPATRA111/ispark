@@ -67,6 +67,9 @@ func SeedDefaultStudents() {
 
 	// ---------------- Certificates ----------------
 
+	pythonIssueDate := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	debateIssueDate := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
+
 	certificates := []models.Certificate{
 		{
 			StudentRollNo:     student.RollNo,
@@ -76,12 +79,12 @@ func SeedDefaultStudents() {
 			OrganizerName:     "Coursera",
 			EventLevel:        "National",
 			CertNumber:        "CERT-PY-001",
-			IssueDate:         time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
+			IssueDate:         &pythonIssueDate,
 			ParticipationType: "Participant",
 			Description:       "Completed Python Programming Course.",
 			FileName:          "python_certificate.pdf",
 			FilePath:          "/certificates/python_certificate.pdf",
-			Credits:           15,
+			Credits:           CreditsForCertificate("Participant", "National"),
 			Status:            "Approved",
 		},
 		{
@@ -92,12 +95,12 @@ func SeedDefaultStudents() {
 			OrganizerName:     "Govt. of MP",
 			EventLevel:        "State",
 			CertNumber:        "CERT-DB-002",
-			IssueDate:         time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC),
+			IssueDate:         &debateIssueDate,
 			ParticipationType: "Runner Up",
 			Description:       "Secured Runner Up position.",
 			FileName:          "debate_certificate.pdf",
 			FilePath:          "/certificates/debate_certificate.pdf",
-			Credits:           5,
+			Credits:           CreditsForCertificate("Runner Up", "State"),
 			Status:            "Pending",
 		},
 	}

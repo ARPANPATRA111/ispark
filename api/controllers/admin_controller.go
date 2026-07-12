@@ -5,6 +5,7 @@ import (
 	"github.com/iips-oss/ispark/api/config"
 	"github.com/iips-oss/ispark/api/models"
 	"github.com/iips-oss/ispark/api/utils"
+	"gorm.io/gorm"
 )
 
 func errJSON(c *fiber.Ctx, status int, msg string) error {
@@ -84,21 +85,54 @@ func AdminChangePassword(c *fiber.Ctx) error {
 }
 
 func getAuthenticatedAdmin(c *fiber.Ctx) (*models.Admin, error) {
-	authHeader := c.Get("Authorization")
-	if len(authHeader) < 8 {
+	adminID, ok := c.Locals("roll_no").(string)
+	if !ok || adminID == "" {
 		return nil, fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
-	tokenString := authHeader[7:]
-	claims, err := utils.ValidateAccessToken(tokenString)
-	if err != nil {
-		return nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid token")
-	}
+
 	var admin models.Admin
-	if err := config.DB.Where("admin_id = ?", claims.RollNo).First(&admin).Error; err != nil {
-		return nil, fiber.NewError(fiber.StatusUnauthorized, "User not found")
+	if err := config.DB.Where("admin_id = ?", adminID).First(&admin).Error; err != nil {
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
 
 	return &admin, nil
+}
+
+func scopeToAssignedBatch(query *gorm.DB, admin *models.Admin) (*gorm.DB, bool) {
+	if admin.Role != "admin" {
+		return query, true
+	}
+	if admin.AssignedBatch == "" {
+		return query, false
+	}
+
+	return query.Where("roll_no LIKE ?", admin.AssignedBatch+"%"), true
+}
+
+func applyStudentStats(student *models.Student) {
+	credits := 0
+	pending := 0
+	for _, cert := range student.Certificates {
+		if cert.Status == "Approved" {
+			credits += cert.Credits
+		}
+		if cert.Status == "Pending" {
+			pending++
+		}
+	}
+
+	student.CreditsEarned = credits
+	student.PendingCertificates = pending
+	student.ActivityCount = len(student.Enrollments)
+
+	switch {
+	case len(student.Enrollments) == 0 && len(student.Certificates) == 0:
+		student.EngagementStatus = "Inactive"
+	case pending > 0:
+		student.EngagementStatus = "Pending Review"
+	default:
+		student.EngagementStatus = "Active"
+	}
 }
 
 // 2. GET /api/admin/students -> View assigned students
@@ -108,25 +142,21 @@ func GetAllStudents(c *fiber.Ctx) error {
 		return err
 	}
 
-	dbQuery := config.DB.Preload("Certificates").Preload("Enrollments")
-	if currentUser.Role == "admin" {
-		dbQuery = dbQuery.Where("roll_no LIKE ?", currentUser.AssignedBatch+"%")
+	dbQuery, scoped := scopeToAssignedBatch(
+		config.DB.Preload("Certificates").Preload("Enrollments"),
+		currentUser,
+	)
+	if !scoped {
+		return c.JSON(fiber.Map{"students": []models.Student{}})
 	}
 
 	var students []models.Student
 	if err := dbQuery.Find(&students).Error; err != nil {
-		return errJSON(c, fiber.StatusInternalServerError, err.Error())
+		return errJSON(c, fiber.StatusInternalServerError, "Failed to retrieve students")
 	}
 
 	for i := range students {
-		credits := 0
-		for _, cert := range students[i].Certificates {
-			if cert.Status == "Approved" {
-				credits += cert.Credits
-			}
-		}
-		students[i].CreditsEarned = credits
-		students[i].ActivityCount = len(students[i].Enrollments)
+		applyStudentStats(&students[i])
 	}
 
 	return c.JSON(fiber.Map{"students": students})
@@ -141,26 +171,21 @@ func GetStudentDetail(c *fiber.Ctx) error {
 		return err
 	}
 
-	query := config.DB.Preload("Enrollments.Activity").
-		Preload("Certificates").
-		Where("roll_no = ?", roll)
-
-	if currentUser.Role == "admin" {
-		query = query.Where("roll_no LIKE ?", currentUser.AssignedBatch+"%")
+	query, scoped := scopeToAssignedBatch(
+		config.DB.Preload("Enrollments.Activity").
+			Preload("Certificates").
+			Where("roll_no = ?", roll),
+		currentUser,
+	)
+	if !scoped {
+		return errJSON(c, fiber.StatusNotFound, "Student not found")
 	}
 
 	var student models.Student
 	if err := query.First(&student).Error; err != nil {
 		return errJSON(c, fiber.StatusNotFound, "Student not found")
 	}
-	credits := 0
-	for _, cert := range student.Certificates {
-		if cert.Status == "Approved" {
-			credits += cert.Credits
-		}
-	}
-	student.CreditsEarned = credits
-	student.ActivityCount = len(student.Enrollments)
+	applyStudentStats(&student)
 
 	return c.JSON(fiber.Map{"student": student})
 }

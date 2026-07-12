@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
-	import { env } from '$env/dynamic/public';
+	import { API_BASE_URL } from '$lib/config';
 	import AdminStudentDetailView from './AdminStudentDetailView.svelte';
 
 	// Optional prop to filter students by batch when navigated from Batch Analytics
@@ -20,14 +20,36 @@
 		creditsEarned: number;
 		creditsTarget: number;
 		certificates: number;
+		pendingCertificates: number;
 		activityCount: number;
 		status: Status;
 		email: string;
 		batch: string;
 	}
 
+	type HistoryStatus = 'Completed' | 'Pending' | 'Rejected';
+
+	interface BackendCertificate {
+		id: number;
+		activity_name: string;
+		organizer_name: string;
+		activity_date: string;
+		credits: number;
+		status: string;
+	}
+
+	interface BackendEnrollment {
+		id: number;
+		status: string;
+		activity?: {
+			name: string;
+			category: string;
+			activity_date: string;
+			credits: number;
+		};
+	}
+
 	interface BackendStudent {
-		id?: string;
 		roll_no?: string;
 		name: string;
 		course_name?: string;
@@ -35,7 +57,30 @@
 		email_id?: string;
 		credits_earned?: number;
 		activity_count?: number;
-		certificates?: { id: number }[]; // array from backend
+		pending_certificates?: number;
+		engagement_status?: string;
+		certificates?: BackendCertificate[];
+		enrollments?: BackendEnrollment[];
+	}
+
+	function formatDate(value: string | undefined): string {
+		if (!value) return '—';
+		const parsed = new Date(value);
+		return Number.isNaN(parsed.getTime())
+			? '—'
+			: parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+	}
+
+	function toHistoryStatus(status: string): HistoryStatus {
+		if (status === 'Approved' || status === 'Completed') return 'Completed';
+		if (status === 'Rejected' || status === 'Cancelled') return 'Rejected';
+		return 'Pending';
+	}
+
+	const STATUSES: Status[] = ['Active', 'At Risk', 'Pending Review', 'Inactive'];
+
+	function toStatus(value: string | undefined): Status {
+		return STATUSES.includes(value as Status) ? (value as Status) : 'Active';
 	}
 
 	// ── State Variables ────────────────────────────────────────────────────────
@@ -43,27 +88,27 @@
 
 	function mapBackendStudent(s: BackendStudent): Student {
 		return {
-			id: s.id ?? s.roll_no ?? '',
+			id: s.roll_no ?? '',
 			name: s.name,
 			regNo: s.roll_no ?? '',
 			department: s.course_name ?? '',
-			semester: s.semester ?? 1,
+			semester: s.semester ?? 0,
 			creditsEarned: s.credits_earned ?? 0,
 			creditsTarget: 200,
 			certificates: s.certificates?.length ?? 0,
+			pendingCertificates: s.pending_certificates ?? 0,
 			activityCount: s.activity_count ?? 0,
-			status: 'Active', // still no backend field for this — flag separately
+			status: toStatus(s.engagement_status),
 			email: s.email_id ?? '',
 			batch: s.roll_no?.match(/^[A-Z]+2K\d+/)?.[0] ?? ''
 		};
 	}
 
 	// ── Data Fetching ──────────────────────────────────────────────────────────
-	const API_BASE = env.PUBLIC_API_BASE_URL;
 	onMount(async () => {
 		try {
 			const token = localStorage.getItem('admin_token');
-			const response = await fetch(`${API_BASE}/api/admin/students`, {
+			const response = await fetch(`${API_BASE_URL}/api/admin/students`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 
@@ -80,7 +125,9 @@
 	// ── Derived Stats ──────────────────────────────────────────────────────────
 	const totalStudents = $derived(allStudents.length);
 	const activeStudents = $derived(allStudents.filter((s) => s.status === 'Active').length);
-	const pendingCertReviews = 7;
+	const pendingCertReviews = $derived(
+		allStudents.reduce((sum, s) => sum + s.pendingCertificates, 0)
+	);
 	const avgCredits = $derived(
 		allStudents.length > 0
 			? Math.round(allStudents.reduce((sum, s) => sum + s.creditsEarned, 0) / allStudents.length)
@@ -145,20 +192,59 @@
 	}
 
 	// ── Modal ──────────────────────────────────────────────────────────────────
+	interface HistoryActivity {
+		id: number;
+		name: string;
+		category: string;
+		date: string;
+		credits: number;
+		status: HistoryStatus;
+	}
+
+	interface HistoryCertificate {
+		id: number;
+		name: string;
+		issuer: string;
+		date: string;
+		credits: number;
+		status: HistoryStatus;
+	}
+
 	let activeStudent = $state<Student | null>(null);
+	let detailActivities = $state<HistoryActivity[]>([]);
+	let detailCertificates = $state<HistoryCertificate[]>([]);
 	let isModalOpen = $state(false);
 
 	async function openStudentModal(student: Student) {
 		try {
 			const token = localStorage.getItem('admin_token');
-			const res = await fetch(`${API_BASE}/api/admin/students/${student.regNo}`, {
+			const res = await fetch(`${API_BASE_URL}/api/admin/students/${student.regNo}`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 
 			if (res.ok) {
 				const data = await res.json();
-				// The 'as Student' cast prevents TypeScript from failing the build
-				activeStudent = { ...student, ...data.student } as Student;
+				const detail: BackendStudent = data.student;
+				activeStudent = mapBackendStudent(detail);
+				detailCertificates = (detail.certificates ?? []).map((cert) => ({
+					id: cert.id,
+					name: cert.activity_name,
+					issuer: cert.organizer_name || '—',
+					date: formatDate(cert.activity_date),
+					credits: cert.credits,
+					status: toHistoryStatus(cert.status)
+				}));
+
+				detailActivities = (detail.enrollments ?? [])
+					.filter((enrollment) => enrollment.activity)
+					.map((enrollment) => ({
+						id: enrollment.id,
+						name: enrollment.activity!.name,
+						category: enrollment.activity!.category,
+						date: formatDate(enrollment.activity!.activity_date),
+						credits: enrollment.activity!.credits,
+						status: toHistoryStatus(enrollment.status)
+					}));
 			} else {
 				activeStudent = student;
 			}
@@ -291,6 +377,8 @@
 		student={detailStudent}
 		rank={studentRank(detailStudent)}
 		cohortSize={totalStudents}
+		activities={detailActivities}
+		certificates={detailCertificates}
 		onBack={closeStudentDetail}
 		onToast={triggerToast}
 	/>
