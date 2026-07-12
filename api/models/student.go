@@ -21,4 +21,11 @@ type Student struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+	Certificates []Certificate  `gorm:"foreignKey:StudentRollNo" json:"certificates"`
+	Enrollments  []Enrollment   `gorm:"foreignKey:StudentRollNo" json:"enrollments"`
+
+	CreditsEarned       int    `gorm:"-" json:"credits_earned"`
+	ActivityCount       int    `gorm:"-" json:"activity_count"`
+	PendingCertificates int    `gorm:"-" json:"pending_certificates"`
+	EngagementStatus    string `gorm:"-" json:"engagement_status"`
 }

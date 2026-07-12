@@ -5,6 +5,7 @@ import (
 	"github.com/iips-oss/ispark/api/config"
 	"github.com/iips-oss/ispark/api/models"
 	"github.com/iips-oss/ispark/api/utils"
+	"gorm.io/gorm"
 )
 
 func errJSON(c *fiber.Ctx, status int, msg string) error {
@@ -19,16 +20,13 @@ func AdminLogin(c *fiber.Ctx) error {
 	if input.AdminID == "" || input.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Admin ID and Password are required"})
 	}
-	// Find the admin using your existing Admin model
 	var admin models.Admin
 	if err := config.DB.Where("admin_id = ?", input.AdminID).First(&admin).Error; err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
 	}
-	// Verify Password
 	if !utils.CheckPasswordHash(input.Password, admin.Password) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
 	}
-	// Generate Access Token
 	accessToken, err := utils.GenerateAccessToken(admin.AdminID, admin.Email, admin.Role)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate access token"})
@@ -45,7 +43,7 @@ func AdminLogin(c *fiber.Ctx) error {
 	})
 }
 
-// 1. POST /admin/change-password -> ChangePassword lets a logged-in admin set a new password (used for both voluntary changes and the forced first-login reset flow)
+// 1. POST /admin/change-password
 func AdminChangePassword(c *fiber.Ctx) error {
 	var input models.ChangePasswordInput
 	if err := c.BodyParser(&input); err != nil {
@@ -84,4 +82,110 @@ func AdminChangePassword(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Password changed successfully"})
+}
+
+func getAuthenticatedAdmin(c *fiber.Ctx) (*models.Admin, error) {
+	adminID, ok := c.Locals("roll_no").(string)
+	if !ok || adminID == "" {
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	var admin models.Admin
+	if err := config.DB.Where("admin_id = ?", adminID).First(&admin).Error; err != nil {
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	return &admin, nil
+}
+
+func scopeToAssignedBatch(query *gorm.DB, admin *models.Admin) (*gorm.DB, bool) {
+	if admin.Role != "admin" {
+		return query, true
+	}
+	if admin.AssignedBatch == "" {
+		return query, false
+	}
+
+	return query.Where("roll_no LIKE ?", admin.AssignedBatch+"%"), true
+}
+
+func applyStudentStats(student *models.Student) {
+	credits := 0
+	pending := 0
+	for _, cert := range student.Certificates {
+		if cert.Status == "Approved" {
+			credits += cert.Credits
+		}
+		if cert.Status == "Pending" {
+			pending++
+		}
+	}
+
+	student.CreditsEarned = credits
+	student.PendingCertificates = pending
+	student.ActivityCount = len(student.Enrollments)
+
+	switch {
+	case len(student.Enrollments) == 0 && len(student.Certificates) == 0:
+		student.EngagementStatus = "Inactive"
+	case pending > 0:
+		student.EngagementStatus = "Pending Review"
+	default:
+		student.EngagementStatus = "Active"
+	}
+}
+
+// 2. GET /api/admin/students -> View assigned students
+func GetAllStudents(c *fiber.Ctx) error {
+	currentUser, err := getAuthenticatedAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	dbQuery, scoped := scopeToAssignedBatch(
+		config.DB.Preload("Certificates").Preload("Enrollments"),
+		currentUser,
+	)
+	if !scoped {
+		return c.JSON(fiber.Map{"students": []models.Student{}})
+	}
+
+	var students []models.Student
+	if err := dbQuery.Find(&students).Error; err != nil {
+		return errJSON(c, fiber.StatusInternalServerError, "Failed to retrieve students")
+	}
+
+	for i := range students {
+		applyStudentStats(&students[i])
+	}
+
+	return c.JSON(fiber.Map{"students": students})
+}
+
+// 3. GET /api/admin/students/:roll -> One student's detail
+func GetStudentDetail(c *fiber.Ctx) error {
+	roll := c.Params("roll")
+
+	currentUser, err := getAuthenticatedAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	query, scoped := scopeToAssignedBatch(
+		config.DB.Preload("Enrollments.Activity").
+			Preload("Certificates").
+			Where("roll_no = ?", roll),
+		currentUser,
+	)
+	if !scoped {
+		return errJSON(c, fiber.StatusNotFound, "Student not found")
+	}
+
+	var student models.Student
+	if err := query.First(&student).Error; err != nil {
+		return errJSON(c, fiber.StatusNotFound, "Student not found")
+	}
+	applyStudentStats(&student)
+
+	return c.JSON(fiber.Map{"student": student})
 }

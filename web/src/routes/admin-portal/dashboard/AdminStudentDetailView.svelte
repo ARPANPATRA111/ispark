@@ -13,10 +13,31 @@
 		creditsEarned: number;
 		creditsTarget: number;
 		certificates: number;
+		pendingCertificates: number;
 		activityCount: number;
 		status: Status;
 		email: string;
 		batch: string;
+	}
+
+	type ActivityStatus = 'Completed' | 'Pending' | 'Rejected';
+
+	interface Activity {
+		id: number;
+		name: string;
+		category: string;
+		date: string;
+		credits: number;
+		status: ActivityStatus;
+	}
+
+	interface Certificate {
+		id: number;
+		name: string;
+		issuer: string;
+		date: string;
+		credits: number;
+		status: ActivityStatus;
 	}
 
 	// ── Props ───────────────────────────────────────────────────────────────────
@@ -24,12 +45,16 @@
 		student,
 		rank,
 		cohortSize,
+		activities = [],
+		certificates = [],
 		onBack,
 		onToast
 	}: {
 		student: Student;
 		rank: number;
 		cohortSize: number;
+		activities?: Activity[];
+		certificates?: Certificate[];
 		onBack: () => void;
 		onToast?: (message: string, type?: 'success' | 'danger') => void;
 	} = $props();
@@ -44,134 +69,7 @@
 	);
 	const creditsRemaining = $derived(Math.max(0, student.creditsTarget - student.creditsEarned));
 	const participationScore = $derived(Math.min(98, 50 + student.activityCount * 2));
-	const pendingCerts = 2;
-
-	// Static mock meta (not present in Student, shown for demo fidelity)
-	const course = 'B.Tech';
-	const track = 'Skill Building';
-
-	// ── Mock Activity History ────────────────────────────────────────────────────
-	type ActivityStatus = 'Completed' | 'Pending' | 'Rejected';
-	interface Activity {
-		id: number;
-		name: string;
-		category: string;
-		date: string;
-		credits: number;
-		status: ActivityStatus;
-	}
-
-	const activities: Activity[] = [
-		{
-			id: 1,
-			name: 'NPTEL Online Certification – Python',
-			category: 'Technical',
-			date: '15 Jun 2025',
-			credits: 20,
-			status: 'Completed'
-		},
-		{
-			id: 2,
-			name: 'National Science Day Seminar',
-			category: 'Academic',
-			date: '28 Feb 2025',
-			credits: 8,
-			status: 'Completed'
-		},
-		{
-			id: 3,
-			name: 'Leadership Development Workshop',
-			category: 'Leadership',
-			date: '10 May 2024',
-			credits: 12,
-			status: 'Completed'
-		},
-		{
-			id: 4,
-			name: 'Internship – Tech Startup',
-			category: 'Professional',
-			date: '22 Apr 2025',
-			credits: 15,
-			status: 'Completed'
-		},
-		{
-			id: 5,
-			name: 'Community Service – Beach Cleanup',
-			category: 'Social',
-			date: '5 Mar 2025',
-			credits: 8,
-			status: 'Completed'
-		},
-		{
-			id: 6,
-			name: 'Research Project – AI Ethics',
-			category: 'Research',
-			date: '18 Jan 2025',
-			credits: 10,
-			status: 'Pending'
-		},
-		{
-			id: 7,
-			name: 'Sports Event Coordination',
-			category: 'Sports',
-			date: '30 Dec 2024',
-			credits: 6,
-			status: 'Completed'
-		},
-		{
-			id: 8,
-			name: 'Cultural Fest Organization',
-			category: 'Cultural',
-			date: '20 Nov 2025',
-			credits: 8,
-			status: 'Rejected'
-		}
-	];
-
-	// ── Mock Certificate History ─────────────────────────────────────────────────
-	interface Certificate {
-		id: number;
-		name: string;
-		issuer: string;
-		date: string;
-		credits: number;
-		status: ActivityStatus;
-	}
-
-	const certificates: Certificate[] = [
-		{
-			id: 1,
-			name: 'Python for Data Science',
-			issuer: 'NPTEL',
-			date: '15 Jun 2025',
-			credits: 20,
-			status: 'Completed'
-		},
-		{
-			id: 2,
-			name: 'Full Stack Web Development',
-			issuer: 'Coursera',
-			date: '2 Apr 2025',
-			credits: 15,
-			status: 'Completed'
-		},
-		{
-			id: 3,
-			name: 'Machine Learning Specialization',
-			issuer: 'DeepLearning.AI',
-			date: '18 Jan 2025',
-			credits: 18,
-			status: 'Pending'
-		},
-		{
-			id: 4,
-			name: 'Cloud Practitioner Essentials',
-			issuer: 'AWS',
-			date: '9 Nov 2024',
-			credits: 12,
-			status: 'Completed'
-		}
-	];
+	const pendingCerts = $derived(student.pendingCertificates);
 
 	// ── Table State ──────────────────────────────────────────────────────────────
 	let activeTab = $state<'activity' | 'certificate'>('activity');
@@ -179,7 +77,7 @@
 	let filterCategory = $state('All');
 	let filterStatus = $state<'All' | ActivityStatus>('All');
 
-	const categories = ['All', ...Array.from(new Set(activities.map((a) => a.category)))];
+	const categories = $derived(['All', ...Array.from(new Set(activities.map((a) => a.category)))]);
 
 	const filteredActivities = $derived(
 		activities.filter((a) => {
@@ -254,6 +152,12 @@
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
+	function semesterLabel(semester: number): string {
+		if (!semester) return '—';
+		const suffix = semester === 1 ? 'st' : semester === 2 ? 'nd' : semester === 3 ? 'rd' : 'th';
+		return `${semester}${suffix} Semester`;
+	}
+
 	function initials(name: string): string {
 		return name
 			.split(' ')
@@ -363,23 +267,25 @@
 						</div>
 						<div>
 							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
-								>Course</span
+								>Email</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5">{course}</span>
+							<span class="text-xs font-bold text-slate-800 block mt-0.5">{student.email}</span>
 						</div>
 						<div>
 							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
 								>Semester</span
 							>
 							<span class="text-xs font-bold text-slate-800 block mt-0.5"
-								>{student.semester}th Semester</span
+								>{semesterLabel(student.semester)}</span
 							>
 						</div>
 						<div>
 							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
-								>Track</span
+								>Batch</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5">{track}</span>
+							<span class="text-xs font-bold text-slate-800 block mt-0.5"
+								>{student.batch || '—'}</span
+							>
 						</div>
 					</div>
 				</div>

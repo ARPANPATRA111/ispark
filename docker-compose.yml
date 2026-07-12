@@ -24,6 +24,7 @@ services:
       - DB_PASSWORD=user
       - DB_NAME=isparc
       - DB_SSLMODE=disable
+      - SEED_DEV_DATA=${SEED_DEV_DATA:-true}
     restart: unless-stopped
     depends_on:
       - db

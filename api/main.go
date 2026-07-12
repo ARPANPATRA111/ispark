@@ -23,12 +23,13 @@ func main() {
 	// Initialize Database
 	config.ConnectDB()
 
-	// Used to check admin login via seeding dummy data
-	config.SeedDefaultAdmin()
+	// Demo data for local development only (see SEED_DEV_DATA)
+	config.SeedDevData()
 
 	// Initialize Fiber App
 	app := fiber.New(fiber.Config{
-		AppName: "iSpark Authentication API",
+		AppName:   "iSpark Authentication API",
+		BodyLimit: 10 * 1024 * 1024, // 10MB limit (frontend will restrict to 5MB)
 	})
 
 	// Add Middlewares

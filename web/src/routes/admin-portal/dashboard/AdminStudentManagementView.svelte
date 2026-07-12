@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
+	import { API_BASE_URL } from '$lib/config';
 	import AdminStudentDetailView from './AdminStudentDetailView.svelte';
 
 	// Optional prop to filter students by batch when navigated from Batch Analytics
@@ -18,213 +20,137 @@
 		creditsEarned: number;
 		creditsTarget: number;
 		certificates: number;
+		pendingCertificates: number;
 		activityCount: number;
 		status: Status;
 		email: string;
 		batch: string;
 	}
 
-	// ── Mock Data ──────────────────────────────────────────────────────────────
-	const allStudents: Student[] = [
-		{
-			id: 'S001',
-			name: 'Rahul Sharma',
-			regNo: 'EN2022001',
-			department: 'Computer Science',
-			semester: 6,
-			creditsEarned: 162,
+	type HistoryStatus = 'Completed' | 'Pending' | 'Rejected';
+
+	interface BackendCertificate {
+		id: number;
+		activity_name: string;
+		organizer_name: string;
+		activity_date: string;
+		credits: number;
+		status: string;
+	}
+
+	interface BackendEnrollment {
+		id: number;
+		status: string;
+		activity?: {
+			name: string;
+			category: string;
+			activity_date: string;
+			credits: number;
+		};
+	}
+
+	interface BackendStudent {
+		roll_no?: string;
+		name: string;
+		course_name?: string;
+		semester?: number;
+		email_id?: string;
+		credits_earned?: number;
+		activity_count?: number;
+		pending_certificates?: number;
+		engagement_status?: string;
+		certificates?: BackendCertificate[];
+		enrollments?: BackendEnrollment[];
+	}
+
+	function formatDate(value: string | undefined): string {
+		if (!value) return '—';
+		const parsed = new Date(value);
+		return Number.isNaN(parsed.getTime())
+			? '—'
+			: parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+	}
+
+	function toHistoryStatus(status: string): HistoryStatus {
+		if (status === 'Approved' || status === 'Completed') return 'Completed';
+		if (status === 'Rejected' || status === 'Cancelled') return 'Rejected';
+		return 'Pending';
+	}
+
+	const STATUSES: Status[] = ['Active', 'At Risk', 'Pending Review', 'Inactive'];
+
+	function toStatus(value: string | undefined): Status {
+		return STATUSES.includes(value as Status) ? (value as Status) : 'Active';
+	}
+
+	// ── State Variables ────────────────────────────────────────────────────────
+	let allStudents = $state<Student[]>([]);
+
+	function mapBackendStudent(s: BackendStudent): Student {
+		return {
+			id: s.roll_no ?? '',
+			name: s.name,
+			regNo: s.roll_no ?? '',
+			department: s.course_name ?? '',
+			semester: s.semester ?? 0,
+			creditsEarned: s.credits_earned ?? 0,
 			creditsTarget: 200,
-			certificates: 4,
-			activityCount: 19,
-			status: 'Active',
-			email: 'rahul.sharma@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S002',
-			name: 'Priya Patel',
-			regNo: 'EN2023012',
-			department: 'Electronics',
-			semester: 4,
-			creditsEarned: 98,
-			creditsTarget: 200,
-			certificates: 3,
-			activityCount: 7,
-			status: 'At Risk',
-			email: 'priya.patel@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S003',
-			name: 'Arjun Patel',
-			regNo: 'EN2022018',
-			department: 'Mechanical',
-			semester: 5,
-			creditsEarned: 125,
-			creditsTarget: 200,
-			certificates: 4,
-			activityCount: 18,
-			status: 'Active',
-			email: 'arjun.patel@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S004',
-			name: 'Sneha Kumar',
-			regNo: 'EN2022015',
-			department: 'Computer Science',
-			semester: 6,
-			creditsEarned: 180,
-			creditsTarget: 200,
-			certificates: 7,
-			activityCount: 16,
-			status: 'Active',
-			email: 'sneha.kumar@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S005',
-			name: 'Vikram Singh',
-			regNo: 'EN2023003',
-			department: 'Civil',
-			semester: 4,
-			creditsEarned: 72,
-			creditsTarget: 200,
-			certificates: 1,
-			activityCount: 3,
-			status: 'Pending Review',
-			email: 'vikram.singh@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S006',
-			name: 'Kavya Krishnan',
-			regNo: 'EN2022008',
-			department: 'Electronics',
-			semester: 5,
-			creditsEarned: 110,
-			creditsTarget: 200,
-			certificates: 4,
-			activityCount: 9,
-			status: 'Active',
-			email: 'kavya.krishnan@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S007',
-			name: 'Dev Mehra',
-			regNo: 'EN2023014',
-			department: 'Mechanical',
-			semester: 3,
-			creditsEarned: 55,
-			creditsTarget: 200,
-			certificates: 0,
-			activityCount: 5,
-			status: 'Pending Review',
-			email: 'dev.mehra@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S008',
-			name: 'Anita Nair',
-			regNo: 'EN2022004',
-			department: 'Computer Science',
-			semester: 6,
-			creditsEarned: 138,
-			creditsTarget: 200,
-			certificates: 4,
-			activityCount: 14,
-			status: 'Active',
-			email: 'anita.nair@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S009',
-			name: 'Rohan Verma',
-			regNo: 'EN2023009',
-			department: 'Civil',
-			semester: 5,
-			creditsEarned: 89,
-			creditsTarget: 200,
-			certificates: 2,
-			activityCount: 6,
-			status: 'At Risk',
-			email: 'rohan.verma@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S010',
-			name: 'Meera Iyer',
-			regNo: 'EN2023021',
-			department: 'Computer Science',
-			semester: 4,
-			creditsEarned: 115,
-			creditsTarget: 200,
-			certificates: 3,
-			activityCount: 8,
-			status: 'Active',
-			email: 'meera.iyer@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S011',
-			name: 'Karthik Rao',
-			regNo: 'EN2022011',
-			department: 'Electronics',
-			semester: 6,
-			creditsEarned: 145,
-			creditsTarget: 200,
-			certificates: 5,
-			activityCount: 12,
-			status: 'Active',
-			email: 'karthik.rao@iips.edu',
-			batch: '2022'
-		},
-		{
-			id: 'S012',
-			name: 'Divya Menon',
-			regNo: 'EN2023017',
-			department: 'Mechanical',
-			semester: 3,
-			creditsEarned: 44,
-			creditsTarget: 200,
-			certificates: 0,
-			activityCount: 2,
-			status: 'Inactive',
-			email: 'divya.menon@iips.edu',
-			batch: '2023'
-		},
-		{
-			id: 'S013',
-			name: 'Palak Rai',
-			regNo: 'EN2022007',
-			department: 'Computer Science',
-			semester: 6,
-			creditsEarned: 185,
-			creditsTarget: 200,
-			certificates: 2,
-			activityCount: 11,
-			status: 'Active',
-			email: 'palak.rai@iips.edu',
-			batch: '2022'
+			certificates: s.certificates?.length ?? 0,
+			pendingCertificates: s.pending_certificates ?? 0,
+			activityCount: s.activity_count ?? 0,
+			status: toStatus(s.engagement_status),
+			email: s.email_id ?? '',
+			batch: s.roll_no?.match(/^[A-Z]+2K\d+/)?.[0] ?? ''
+		};
+	}
+
+	// ── Data Fetching ──────────────────────────────────────────────────────────
+	onMount(async () => {
+		try {
+			const token = localStorage.getItem('admin_token');
+			const response = await fetch(`${API_BASE_URL}/api/admin/students`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+
+			if (!response.ok) throw new Error('Failed to fetch students');
+
+			const data = await response.json();
+
+			allStudents = data.students.map(mapBackendStudent);
+		} catch {
+			triggerToast('Failed to load student data', 'danger');
 		}
-	];
+	});
 
 	// ── Derived Stats ──────────────────────────────────────────────────────────
-	const totalStudents = allStudents.length;
-	const activeStudents = allStudents.filter((s) => s.status === 'Active').length;
-	const pendingCertReviews = 7;
-	const avgCredits = Math.round(
-		allStudents.reduce((sum, s) => sum + s.creditsEarned, 0) / allStudents.length
+	const totalStudents = $derived(allStudents.length);
+	const activeStudents = $derived(allStudents.filter((s) => s.status === 'Active').length);
+	const pendingCertReviews = $derived(
+		allStudents.reduce((sum, s) => sum + s.pendingCertificates, 0)
+	);
+	const avgCredits = $derived(
+		allStudents.length > 0
+			? Math.round(allStudents.reduce((sum, s) => sum + s.creditsEarned, 0) / allStudents.length)
+			: 0
 	);
 
 	// Student Overview highlights
 	const perfScore = (s: Student) => s.creditsEarned + s.certificates * 15 + s.activityCount * 2;
-	const topPerformer = [...allStudents].sort((a, b) => perfScore(b) - perfScore(a))[0];
-	const highestCredits = [...allStudents].sort((a, b) => b.creditsEarned - a.creditsEarned)[0];
-	const mostActive = [...allStudents].sort((a, b) => b.activityCount - a.activityCount)[0];
-	const pendingAttention = allStudents.filter(
-		(s) => s.status === 'At Risk' || s.status === 'Pending Review'
+	const topPerformer = $derived(
+		allStudents.length > 0 ? [...allStudents].sort((a, b) => perfScore(b) - perfScore(a))[0] : null
+	);
+	const highestCredits = $derived(
+		allStudents.length > 0
+			? [...allStudents].sort((a, b) => b.creditsEarned - a.creditsEarned)[0]
+			: null
+	);
+	const mostActive = $derived(
+		allStudents.length > 0
+			? [...allStudents].sort((a, b) => b.activityCount - a.activityCount)[0]
+			: null
+	);
+	const pendingAttention = $derived(
+		allStudents.filter((s) => s.status === 'At Risk' || s.status === 'Pending Review')
 	);
 
 	// ── Table State ────────────────────────────────────────────────────────────
@@ -235,7 +161,11 @@
 	const pageSize = 10;
 	let showFilters = $state(false);
 
-	const departments = ['All', ...Array.from(new Set(allStudents.map((s) => s.department)))];
+	// Must be derived so it updates after the fetch completes!
+	const departments = $derived([
+		'All',
+		...Array.from(new Set(allStudents.map((s) => s.department)))
+	]);
 
 	const filteredStudents = $derived(
 		allStudents.filter((s) => {
@@ -253,7 +183,6 @@
 	);
 
 	const totalPages = $derived(Math.max(1, Math.ceil(filteredStudents.length / pageSize)));
-
 	const pagedStudents = $derived(
 		filteredStudents.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 	);
@@ -263,11 +192,65 @@
 	}
 
 	// ── Modal ──────────────────────────────────────────────────────────────────
+	interface HistoryActivity {
+		id: number;
+		name: string;
+		category: string;
+		date: string;
+		credits: number;
+		status: HistoryStatus;
+	}
+
+	interface HistoryCertificate {
+		id: number;
+		name: string;
+		issuer: string;
+		date: string;
+		credits: number;
+		status: HistoryStatus;
+	}
+
 	let activeStudent = $state<Student | null>(null);
+	let detailActivities = $state<HistoryActivity[]>([]);
+	let detailCertificates = $state<HistoryCertificate[]>([]);
 	let isModalOpen = $state(false);
 
-	function openStudentModal(student: Student) {
-		activeStudent = student;
+	async function openStudentModal(student: Student) {
+		try {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/students/${student.regNo}`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				const detail: BackendStudent = data.student;
+				activeStudent = mapBackendStudent(detail);
+				detailCertificates = (detail.certificates ?? []).map((cert) => ({
+					id: cert.id,
+					name: cert.activity_name,
+					issuer: cert.organizer_name || '—',
+					date: formatDate(cert.activity_date),
+					credits: cert.credits,
+					status: toHistoryStatus(cert.status)
+				}));
+
+				detailActivities = (detail.enrollments ?? [])
+					.filter((enrollment) => enrollment.activity)
+					.map((enrollment) => ({
+						id: enrollment.id,
+						name: enrollment.activity!.name,
+						category: enrollment.activity!.category,
+						date: formatDate(enrollment.activity!.activity_date),
+						credits: enrollment.activity!.credits,
+						status: toHistoryStatus(enrollment.status)
+					}));
+			} else {
+				activeStudent = student;
+			}
+		} catch {
+			activeStudent = student;
+		}
 		isModalOpen = true;
 	}
 
@@ -279,7 +262,6 @@
 	// ── Student Detail View ──────────────────────────────────────────────────────
 	let detailStudent = $state<Student | null>(null);
 
-	// Rank by credits earned within the cohort (1 = highest)
 	function studentRank(student: Student): number {
 		return allStudents.filter((s) => s.creditsEarned > student.creditsEarned).length + 1;
 	}
@@ -395,6 +377,8 @@
 		student={detailStudent}
 		rank={studentRank(detailStudent)}
 		cohortSize={totalStudents}
+		activities={detailActivities}
+		certificates={detailCertificates}
 		onBack={closeStudentDetail}
 		onToast={triggerToast}
 	/>
@@ -565,9 +549,11 @@
 						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
 							>Top Performer</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">{topPerformer.name}</span>
+						<span class="font-bold text-sm text-slate-900 truncate">
+							{topPerformer?.name || 'Waiting for data...'}
+						</span>
 						<span class="text-[10px] text-slate-500 font-semibold">
-							{topPerformer.creditsEarned} credits · {topPerformer.department}
+							{topPerformer?.creditsEarned || 0} credits · {topPerformer?.department || '...'}
 						</span>
 					</div>
 				</div>
@@ -598,9 +584,11 @@
 						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
 							>Highest Credits Earned</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">{highestCredits.name}</span>
+						<span class="font-bold text-sm text-slate-900 truncate">
+							{highestCredits?.name || 'Waiting for data...'}
+						</span>
 						<span class="text-[10px] text-slate-500 font-semibold">
-							{highestCredits.creditsEarned} credits earned this batch
+							{highestCredits?.creditsEarned || 0} credits earned this batch
 						</span>
 					</div>
 				</div>
@@ -631,9 +619,11 @@
 						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
 							>Most Active Student</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">{mostActive.name}</span>
+						<span class="font-bold text-sm text-slate-900 truncate">
+							{mostActive?.name || 'Waiting for data...'}
+						</span>
 						<span class="text-[10px] text-slate-500 font-semibold">
-							{mostActive.activityCount} activities logged
+							{mostActive?.activityCount || 0} activities logged
 						</span>
 					</div>
 				</div>
