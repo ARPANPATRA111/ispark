@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
 	import ActivityManagementView from './ActivityManagementView.svelte';
+	import TrackManagementView from './TrackManagementView.svelte';
 
 	// Sidebar menu items list for Super Admin Portal
 	const menuItems = [
@@ -1700,6 +1701,8 @@
 				</section>
 			{:else if currentTab === 'Activity Management'}
 				<ActivityManagementView />
+			{:else if currentTab === 'Track Management'}
+				<TrackManagementView />
 			{:else if currentTab === 'User Management'}
 				<!-- User Statistics Cards Grid (Step 2) -->
 				<section
