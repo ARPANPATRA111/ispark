@@ -15,8 +15,8 @@ type Certificate struct {
 	ActivityDate      time.Time      `json:"activity_date"`
 	OrganizerName     string         `gorm:"type:varchar(255)" json:"organizer_name"`
 	EventLevel        string         `gorm:"type:varchar(100)" json:"event_level"`
-	CertNumber        string         `gorm:"type:varchar(100);not null" json:"cert_number"`
-	IssueDate         time.Time      `json:"issue_date"`
+	CertNumber        string         `gorm:"type:varchar(100)" json:"cert_number"`
+	IssueDate         *time.Time     `json:"issue_date"`
 	ParticipationType string         `gorm:"type:varchar(100)" json:"participation_type"` // Winner, Runner Up, Participant, Coordinator, Volunteer
 	Description       string         `gorm:"type:text" json:"description"`
 	FileName          string         `gorm:"type:varchar(255)" json:"file_name"`

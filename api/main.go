@@ -28,7 +28,8 @@ func main() {
 
 	// Initialize Fiber App
 	app := fiber.New(fiber.Config{
-		AppName: "iSpark Authentication API",
+		AppName:   "iSpark Authentication API",
+		BodyLimit: 10 * 1024 * 1024, // 10MB limit (frontend will restrict to 5MB)
 	})
 
 	// Add Middlewares

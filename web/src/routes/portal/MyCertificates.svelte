@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { API_BASE_URL } from '$lib/config';
 
 	// Props using Svelte 5 runes
 	let {
@@ -15,102 +16,90 @@
 		}) => void;
 	} = $props();
 
-	// Mock Certificate Registry Data
-	const certificates = [
-		{
-			id: 'CERT-2026-001',
-			activity: 'National Hackathon',
-			category: 'Technical',
-			date: '10 Jun 2026',
-			credits: 15,
-			status: 'Verified',
-			verifiedBy: 'Dr. Sharma',
-			file: 'national_hackathon_first_prize.pdf',
-			feedback: 'Excellent work in the technical track. Credits approved in full.'
-		},
-		{
-			id: 'CERT-2026-002',
-			activity: 'Debate Championship',
-			category: 'Public Speaking',
-			date: '15 Jun 2026',
-			credits: 10,
-			status: 'Pending',
-			verifiedBy: '—',
-			file: 'debate_championship_certificate.pdf',
-			feedback: 'Awaiting faculty review and credit authorization.'
-		},
-		{
-			id: 'CERT-2026-003',
-			activity: 'Blood Donation Camp',
-			category: 'Social Service',
-			date: '20 Jun 2026',
-			credits: 5,
-			status: 'Rejected',
-			verifiedBy: 'Prof. Verma',
-			file: 'blood_donation_2026.png',
-			feedback:
-				'The uploaded file is blurry. Please upload a clear and legible scan of the certificate.'
-		},
-		{
-			id: 'CERT-2026-004',
-			activity: 'Research Symposium',
-			category: 'Research & Innovation',
-			date: '5 Jun 2026',
-			credits: 20,
-			status: 'Verified',
-			verifiedBy: 'Dr. Patel',
-			file: 'research_paper_presentation.pdf',
-			feedback: 'Research paper on ML reviewed. Approved for 20 extracurricular credits.'
-		},
-		{
-			id: 'CERT-2026-005',
-			activity: 'Cultural Fest Organiser',
-			category: 'Cultural',
-			date: '1 Jun 2026',
-			credits: 8,
-			status: 'Verified',
-			verifiedBy: 'Prof. Singh',
-			file: 'cultural_fest_management_role.pdf',
-			feedback: 'Organizing committee role verified. Approved.'
-		},
-		{
-			id: 'CERT-2026-006',
-			activity: 'Inter-College Cricket',
-			category: 'Sports',
-			date: '18 Jun 2026',
-			credits: 12,
-			status: 'Pending',
-			verifiedBy: '—',
-			file: 'cricket_tournament_runnerup.pdf',
-			feedback: 'Awaiting verification of sports credentials from physical education dept.'
-		},
-		{
-			id: 'CERT-2026-007',
-			activity: 'NSS Community Drive',
-			category: 'Social Service',
-			date: '25 May 2026',
-			credits: 10,
-			status: 'Verified',
-			verifiedBy: 'Dr. Mehta',
-			file: 'nss_drive_participation.pdf',
-			feedback: 'Community service hours audited. Approved for 10 credits.'
-		},
-		{
-			id: 'CERT-2026-008',
-			activity: 'Public Speaking Workshop',
-			category: 'Public Speaking',
-			date: '12 Jun 2026',
-			credits: 6,
-			status: 'Rejected',
-			verifiedBy: 'Prof. Verma',
-			file: 'public_speaking_certificate.jpg',
-			feedback:
-				'Name on the certificate does not match registered student records. Please re-upload with correct details.'
+	interface BackendCertificate {
+		id: number;
+		student_roll_no: string;
+		activity_name: string;
+		activity_category: string;
+		activity_date: string;
+		organizer_name: string;
+		event_level: string;
+		cert_number: string;
+		issue_date: string;
+		participation_type: string;
+		description: string;
+		file_name: string;
+		file_path: string;
+		credits: number;
+		status: string;
+		rejection_reason: string;
+	}
+
+	interface MappedCertificate {
+		id: number;
+		certNumber: string;
+		activity: string;
+		category: string;
+		date: string;
+		credits: number;
+		status: string;
+		verifiedBy: string;
+		file: string;
+		feedback: string;
+	}
+
+	let token = localStorage.getItem('access_token') || '';
+	let certificates = $state<MappedCertificate[]>([]);
+
+	function formatDate(dateStr: string) {
+		if (!dateStr) return '';
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		});
+	}
+
+	async function loadCertificates() {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/certificates`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				certificates = data.map((cert: BackendCertificate) => ({
+					id: cert.id,
+					certNumber: cert.cert_number || '',
+					activity: cert.activity_name,
+					category: cert.activity_category,
+					date: formatDate(cert.activity_date),
+					credits: cert.credits,
+					status: cert.status === 'Approved' ? 'Verified' : cert.status,
+					verifiedBy: cert.status === 'Approved' ? 'Faculty Mentor' : '—',
+					file: cert.file_name,
+					feedback:
+						cert.status === 'Rejected'
+							? cert.rejection_reason
+							: cert.status === 'Approved'
+								? 'Credits approved in full.'
+								: 'Awaiting faculty review.'
+				}));
+			}
+		} catch (err) {
+			console.error('Error fetching certificates:', err);
 		}
-	];
+	}
+
+	$effect(() => {
+		loadCertificates();
+	});
 
 	// Detail Modal state
-	let activeCert = $state<(typeof certificates)[0] | null>(null);
+	let activeCert = $state<MappedCertificate | null>(null);
 	let isModalOpen = $state(false);
 
 	// Toasts state
@@ -129,7 +118,7 @@
 		}, 3000);
 	}
 
-	function openModal(cert: (typeof certificates)[0]) {
+	function openModal(cert: MappedCertificate) {
 		activeCert = cert;
 		isModalOpen = true;
 	}
@@ -139,11 +128,35 @@
 		activeCert = null;
 	}
 
-	function handleDownload(certId: string, filename: string) {
-		triggerToast(`Downloading certificate ${certId} (${filename})...`);
+	async function handleDownload(certId: number | string, filename: string) {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/certificates/${certId}/file`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to download certificate');
+			}
+
+			const blob = await res.blob();
+			const objectUrl = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = objectUrl;
+			link.download = filename || `certificate-${certId}`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(objectUrl);
+
+			triggerToast(`Downloading certificate ${certId} (${filename})...`);
+		} catch {
+			triggerToast('Could not download this certificate. Please try again.');
+		}
 	}
 
-	function handleReuploadClick(cert: (typeof certificates)[0]) {
+	function handleReuploadClick(cert: MappedCertificate) {
 		// Populate draft and switch tab
 		onSelectForReupload({
 			name: cert.activity,
@@ -156,6 +169,15 @@
 			onTabChange('Upload Certificate');
 		}, 800);
 	}
+
+	let totalCount = $derived(certificates.length);
+	let verifiedCount = $derived(certificates.filter((c) => c.status === 'Verified').length);
+	let pendingCount = $derived(certificates.filter((c) => c.status === 'Pending').length);
+	let rejectedCount = $derived(certificates.filter((c) => c.status === 'Rejected').length);
+
+	let verifiedPct = $derived(totalCount > 0 ? (verifiedCount / totalCount) * 100 : 0);
+	let pendingPct = $derived(totalCount > 0 ? (pendingCount / totalCount) * 100 : 0);
+	let rejectedPct = $derived(totalCount > 0 ? (rejectedCount / totalCount) * 100 : 0);
 </script>
 
 <!-- Toast Container -->
@@ -194,7 +216,7 @@
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-2xl font-bold font-serif text-slate-900">18</span>
+			<span class="text-2xl font-bold font-serif text-slate-900">{totalCount}</span>
 			<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
 				<!-- File icon -->
 				<svg
@@ -223,7 +245,7 @@
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-2xl font-bold font-serif text-slate-900">12</span>
+			<span class="text-2xl font-bold font-serif text-slate-900">{verifiedCount}</span>
 			<div class="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
 				<!-- Check circle icon -->
 				<svg
@@ -254,7 +276,7 @@
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-2xl font-bold font-serif text-slate-900">4</span>
+			<span class="text-2xl font-bold font-serif text-slate-900">{pendingCount}</span>
 			<div class="p-2.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
 				<!-- Clock Icon -->
 				<svg
@@ -285,7 +307,7 @@
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-2xl font-bold font-serif text-slate-900">2</span>
+			<span class="text-2xl font-bold font-serif text-slate-900">{rejectedCount}</span>
 			<div class="p-2.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
 				<!-- X circle icon -->
 				<svg
@@ -323,19 +345,23 @@
 	<div class="space-y-4">
 		<!-- Horizontal Proportion Bar -->
 		<div class="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
-			<!-- Verified (12/18 = 66.7%) -->
+			<!-- Verified -->
 			<div
 				class="h-full bg-emerald-600 rounded-l-full"
-				style="width: 66.7%"
-				title="Verified: 66.7%"
+				style="width: {verifiedPct}%"
+				title="Verified: {verifiedPct.toFixed(1)}%"
 			></div>
-			<!-- Pending (4/18 = 22.2%) -->
-			<div class="h-full bg-amber-500" style="width: 22.2%" title="Pending: 22.2%"></div>
-			<!-- Rejected (2/18 = 11.1%) -->
+			<!-- Pending -->
+			<div
+				class="h-full bg-amber-500"
+				style="width: {pendingPct}%"
+				title="Pending: {pendingPct.toFixed(1)}%"
+			></div>
+			<!-- Rejected -->
 			<div
 				class="h-full bg-rose-600 rounded-r-full"
-				style="width: 11.1%"
-				title="Rejected: 11.1%"
+				style="width: {rejectedPct}%"
+				title="Rejected: {rejectedPct.toFixed(1)}%"
 			></div>
 		</div>
 
@@ -393,7 +419,7 @@
 			<tbody class="divide-y divide-slate-100 text-xs font-sans">
 				{#each certificates as cert}
 					<tr class="hover:bg-slate-50/50 transition-colors">
-						<td class="py-4 px-5 font-bold text-slate-800 select-all">{cert.id}</td>
+						<td class="py-4 px-5 font-bold text-slate-800 select-all">{cert.certNumber || '—'}</td>
 						<td class="py-4 px-5 font-bold text-slate-850">{cert.activity}</td>
 						<td class="py-4 px-5 text-slate-500 font-semibold">{cert.category}</td>
 						<td class="py-4 px-5 text-slate-500 font-medium">{cert.date}</td>
@@ -518,9 +544,11 @@
 			<div class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30">
 				<div>
 					<h3 class="text-sm font-bold font-serif text-inst-navy">Certificate Details</h3>
-					<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-						ID: {activeCert.id}
-					</p>
+					{#if activeCert.certNumber}
+						<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+							ID: {activeCert.certNumber}
+						</p>
+					{/if}
 				</div>
 				<button
 					onclick={closeModal}
