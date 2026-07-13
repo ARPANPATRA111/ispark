@@ -42,6 +42,7 @@ func SetupRoutes(app *fiber.App) {
 	student.Post("/activities/:id/enroll", controllers.EnrollActivity)
 	student.Get("/enrollments", controllers.GetEnrollments)
 	student.Get("/dashboard/stats", controllers.GetDashboardStats)
+	student.Get("/marksheet", controllers.GetMarksheet)
 
 	// Admin
 	api.Post("/admin/auth/login", controllers.AdminLogin)

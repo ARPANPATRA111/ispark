@@ -459,7 +459,7 @@
 				{#each menuItems as item}
 					<button
 						onclick={() => (currentTab = item.name)}
-						class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
+						class="w-full flex items-start gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 						item.name
 							? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
 							: 'text-slate-505 hover:bg-slate-50 hover:text-slate-900'}"
@@ -470,11 +470,11 @@
 							viewBox="0 0 24 24"
 							stroke="currentColor"
 							stroke-width="2"
-							class="w-5 h-5"
+							class="w-5 h-5 shrink-0 mt-0.5"
 						>
 							<path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
 						</svg>
-						{item.name}
+						<span class="text-left">{item.name}</span>
 					</button>
 				{/each}
 			</nav>
@@ -561,7 +561,7 @@
 								currentTab = item.name;
 								toggleMobileSidebar();
 							}}
-							class="w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
+							class="w-full flex items-start gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 							item.name
 								? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
 								: 'text-slate-505 hover:bg-slate-50 hover:text-slate-900'}"
@@ -572,11 +572,11 @@
 								viewBox="0 0 24 24"
 								stroke="currentColor"
 								stroke-width="2"
-								class="w-5 h-5"
+								class="w-5 h-5 shrink-0 mt-0.5"
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
 							</svg>
-							{item.name}
+							<span class="text-left">{item.name}</span>
 						</button>
 					{/each}
 				</nav>

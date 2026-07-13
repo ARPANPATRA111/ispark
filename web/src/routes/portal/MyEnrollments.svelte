@@ -60,6 +60,7 @@
 	interface APICreditCategory {
 		category: string;
 		credits: number;
+		contribution: string;
 	}
 
 	let token = localStorage.getItem('access_token') || '';
@@ -141,15 +142,12 @@
 			if (marksheetRes.ok) {
 				const data = await marksheetRes.json();
 				creditCategorySummaries = (data.credit_categories || []).map((cat: APICreditCategory) => {
-					let req = 40; // baseline
-					if (cat.category.toLowerCase().includes('technical')) req = 60;
-					else if (cat.category.toLowerCase().includes('social')) req = 30;
-
+					const pct = parseInt(cat.contribution) || 0;
 					return {
 						category: cat.category,
 						creditsEarned: cat.credits,
-						creditsRequired: req,
-						percentage: Math.min(Math.round((cat.credits / req) * 100), 100)
+						creditsRequired: 0,
+						percentage: pct
 					};
 				});
 			}
