@@ -209,4 +209,3 @@ func GetAdminProfile(c *fiber.Ctx) error {
 		},
 	})
 }
-
