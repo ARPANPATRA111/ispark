@@ -669,3 +669,466 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		"recent_activities":       recentActivities,
 	})
 }
+
+// StudentInfoResponse represents student details for the marksheet
+type StudentInfoResponse struct {
+	Name         string `json:"name"`
+	RollNo       string `json:"rollNo"`
+	EnrollmentNo string `json:"enrollmentNo"`
+	Semester     string `json:"semester"`
+	Course       string `json:"course"`
+	Department   string `json:"department"`
+	Batch        string `json:"batch"`
+	Institute    string `json:"institute"`
+	AcademicYear string `json:"academicYear"`
+}
+
+// CreditCategoryResponse represents category-wise aggregated credits
+type CreditCategoryResponse struct {
+	Category     string `json:"category"`
+	Activities   int    `json:"activities"`
+	Credits      int    `json:"credits"`
+	Contribution string `json:"contribution"`
+}
+
+// SemesterSummaryEntry represents semester-wise credits and activities
+type SemesterSummaryEntry struct {
+	Semester        string `json:"semester"`
+	Name            string `json:"name"`
+	Credits         int    `json:"credits"`
+	Activities      int    `json:"activities"`
+	ActivitiesCount int    `json:"activitiesCount"`
+	Cumulative      int    `json:"cumulative"`
+	Grade           string `json:"grade"`
+}
+
+// MarksheetResponse represents the full payload of the marksheet
+type MarksheetResponse struct {
+	StudentInfo              StudentInfoResponse      `json:"student_info"`
+	CreditCategories         []CreditCategoryResponse `json:"credit_categories"`
+	TotalActivities          int                      `json:"total_activities"`
+	TotalCredits             int                      `json:"total_credits"`
+	TotalContribution        string                   `json:"total_contribution"`
+	SemesterSummary          []SemesterSummaryEntry   `json:"semester_summary"`
+	FinalGrade               string                   `json:"final_grade"`
+	TargetCredits            int                      `json:"target_credits"`
+	CreditsNeededToNextGrade int                      `json:"credits_needed_to_next_grade"`
+	NextGrade                string                   `json:"next_grade"`
+	GradeScales              []fiber.Map              `json:"grade_scales"`
+	Insights                 []fiber.Map              `json:"insights"`
+}
+
+// GetMarksheet generates the extracurricular marksheet, credits, and progress data
+func GetMarksheet(c *fiber.Ctx) error {
+	rollNo := c.Locals("roll_no").(string)
+
+	var student models.Student
+	if err := config.DB.Where("roll_no = ?", rollNo).First(&student).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Student not found",
+		})
+	}
+
+	// Fetch all approved certificates
+	var approvedCerts []models.Certificate
+	if err := config.DB.Where("student_roll_no = ? AND status = 'Approved'", rollNo).Find(&approvedCerts).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch approved certificates",
+		})
+	}
+
+	admissionYear := parseAdmissionYear(rollNo)
+
+	// Format Student Info
+	duration := 5
+	courseLower := strings.ToLower(student.CourseName)
+
+	// 2-Year Courses
+	if strings.Contains(courseLower, "apr") ||
+		(strings.Contains(courseLower, "mba") && (strings.Contains(courseLower, "2") || strings.Contains(courseLower, "entrepreneurship"))) ||
+		strings.Contains(courseLower, "entrepreneurship") {
+		duration = 2
+	} else if strings.Contains(courseLower, "b.com") || strings.Contains(courseLower, "bcom") {
+		// 3-Year Courses
+		duration = 3
+	} else if strings.Contains(courseLower, "mca") ||
+		strings.Contains(courseLower, "m.tech") || strings.Contains(courseLower, "mtech") ||
+		strings.Contains(courseLower, "computer science") ||
+		strings.Contains(courseLower, "information technology") ||
+		strings.Contains(courseLower, "tourism") ||
+		(strings.Contains(courseLower, "mba") && (strings.Contains(courseLower, "5") || strings.Contains(courseLower, "ms"))) {
+		// 5-Year Courses
+		duration = 5
+	}
+	batchStr := fmt.Sprintf("%d – %d", admissionYear, admissionYear+duration)
+
+	deptStr := "-"
+	if strings.Contains(courseLower, "mca") {
+		deptStr = "-"
+	} else if strings.Contains(courseLower, "computer science") {
+		deptStr = "Computer Science"
+	} else if strings.Contains(courseLower, "information") || strings.Contains(courseLower, "it") {
+		deptStr = "Information Technology"
+	}
+
+	// Calculate Academic Year
+	now := time.Now()
+	var startYear int
+	if now.Month() >= time.July {
+		startYear = now.Year()
+	} else {
+		startYear = now.Year() - 1
+	}
+	endYearPart := (startYear + 1) % 100
+	academicYearStr := fmt.Sprintf("%d-%02d", startYear, endYearPart)
+
+	studentInfo := StudentInfoResponse{
+		Name:         student.Name,
+		RollNo:       student.RollNo,
+		EnrollmentNo: student.EnrollmentNo,
+		Semester:     semesterName(student.Semester),
+		Course:       student.CourseName,
+		Department:   deptStr,
+		Batch:        batchStr,
+		Institute:    "IIPS, DAVV Indore",
+		AcademicYear: academicYearStr,
+	}
+
+	// Category aggregates
+	type CatGroup struct {
+		Category string
+		Count    int
+		Credits  int
+	}
+	var groups []CatGroup
+	if err := config.DB.Raw(`
+		SELECT UPPER(activity_category) as category, COUNT(*) as count, SUM(credits) as credits
+		FROM certificates
+		WHERE student_roll_no = ? AND status = 'Approved'
+		GROUP BY UPPER(activity_category)
+	`, rollNo).Scan(&groups).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to aggregate categories",
+		})
+	}
+
+	standardCategories := []string{"TECHNICAL", "PUBLIC SPEAKING", "RESEARCH", "SOCIAL SERVICE", "SPORTS", "CULTURAL", "LEADERSHIP"}
+	catMap := make(map[string]CatGroup)
+	for _, sc := range standardCategories {
+		catMap[sc] = CatGroup{Category: sc, Count: 0, Credits: 0}
+	}
+	for _, g := range groups {
+		catMap[g.Category] = g
+	}
+
+	var creditCategories []CreditCategoryResponse
+	totalActivities := 0
+	totalCredits := 0
+
+	for _, sc := range standardCategories {
+		g := catMap[sc]
+		creditCategories = append(creditCategories, CreditCategoryResponse{
+			Category:   formatCategoryName(sc),
+			Activities: g.Count,
+			Credits:    g.Credits,
+		})
+		totalActivities += g.Count
+		totalCredits += g.Credits
+	}
+	for _, g := range groups {
+		found := false
+		for _, sc := range standardCategories {
+			if sc == g.Category {
+				found = true
+				break
+			}
+		}
+		if !found {
+			creditCategories = append(creditCategories, CreditCategoryResponse{
+				Category:   formatCategoryName(g.Category),
+				Activities: g.Count,
+				Credits:    g.Credits,
+			})
+			totalActivities += g.Count
+			totalCredits += g.Credits
+		}
+	}
+
+	for i := range creditCategories {
+		if totalCredits > 0 {
+			pct := float64(creditCategories[i].Credits) / float64(totalCredits) * 100
+			creditCategories[i].Contribution = fmt.Sprintf("%.0f%%", pct)
+		} else {
+			creditCategories[i].Contribution = "0%"
+		}
+	}
+
+	// Semester records
+	semCerts := make(map[int][]models.Certificate)
+	for _, cert := range approvedCerts {
+		semNum := getSemesterForActivity(cert.ActivityDate, admissionYear)
+		semCerts[semNum] = append(semCerts[semNum], cert)
+	}
+
+	startSem := student.Semester
+	for semNum := range semCerts {
+		if semNum < startSem {
+			startSem = semNum
+		}
+	}
+	if startSem < 1 {
+		startSem = 1
+	}
+	currentSemester := student.Semester
+	if currentSemester < startSem {
+		currentSemester = startSem
+	}
+
+	var semesterSummary []SemesterSummaryEntry
+	cumulative := 0
+	for sem := startSem; sem <= currentSemester; sem++ {
+		certs := semCerts[sem]
+		semCredits := 0
+		semActCount := len(certs)
+		for _, cert := range certs {
+			semCredits += cert.Credits
+		}
+		cumulative += semCredits
+		grade := getSemesterGrade(semCredits)
+
+		semesterSummary = append(semesterSummary, SemesterSummaryEntry{
+			Semester:        romanSemester(sem),
+			Name:            fmt.Sprintf("Semester %d", sem),
+			Credits:         semCredits,
+			Activities:      semActCount,
+			ActivitiesCount: semActCount,
+			Cumulative:      cumulative,
+			Grade:           grade,
+		})
+	}
+
+	finalGrade, neededToNext, nextGrade, scales := getGradeAndNextInfo(totalCredits)
+	insights := generateInsights(creditCategories, neededToNext, nextGrade)
+
+	contributionStr := "100%"
+	if totalCredits == 0 {
+		contributionStr = "0%"
+	}
+
+	return c.JSON(MarksheetResponse{
+		StudentInfo:              studentInfo,
+		CreditCategories:         creditCategories,
+		TotalActivities:          totalActivities,
+		TotalCredits:             totalCredits,
+		TotalContribution:        contributionStr,
+		SemesterSummary:          semesterSummary,
+		FinalGrade:               finalGrade,
+		TargetCredits:            200,
+		CreditsNeededToNextGrade: neededToNext,
+		NextGrade:                nextGrade,
+		GradeScales:              scales,
+		Insights:                 insights,
+	})
+}
+
+func parseAdmissionYear(rollNo string) int {
+	idx := strings.Index(strings.ToUpper(rollNo), "2K")
+	if idx != -1 && len(rollNo) >= idx+4 {
+		yearPart := rollNo[idx+2 : idx+4]
+		if yr, err := strconv.Atoi(yearPart); err == nil {
+			return 2000 + yr
+		}
+	}
+	for i := 0; i <= len(rollNo)-4; i++ {
+		if yr, err := strconv.Atoi(rollNo[i : i+4]); err == nil && yr >= 1990 && yr <= 2100 {
+			return yr
+		}
+	}
+	return time.Now().Year() - 3
+}
+
+func semesterName(sem int) string {
+	mapping := map[int]string{
+		1:  "I (First)",
+		2:  "II (Second)",
+		3:  "III (Third)",
+		4:  "IV (Fourth)",
+		5:  "V (Fifth)",
+		6:  "VI (Sixth)",
+		7:  "VII (Seventh)",
+		8:  "VIII (Eighth)",
+		9:  "IX (Ninth)",
+		10: "X (Tenth)",
+	}
+	if name, ok := mapping[sem]; ok {
+		return name
+	}
+	return strconv.Itoa(sem)
+}
+
+func romanSemester(sem int) string {
+	roman := map[int]string{
+		1:  "Semester I",
+		2:  "Semester II",
+		3:  "Semester III",
+		4:  "Semester IV",
+		5:  "Semester V",
+		6:  "Semester VI",
+		7:  "Semester VII",
+		8:  "Semester VIII",
+		9:  "Semester IX",
+		10: "Semester X",
+	}
+	if name, ok := roman[sem]; ok {
+		return name
+	}
+	return fmt.Sprintf("Semester %d", sem)
+}
+
+func formatCategoryName(category string) string {
+	mapping := map[string]string{
+		"TECHNICAL":       "Technical Skills",
+		"PUBLIC SPEAKING": "Public Speaking",
+		"RESEARCH":        "Research",
+		"SOCIAL SERVICE":  "Social Service",
+		"SPORTS":          "Sports",
+		"LEADERSHIP":      "Leadership",
+		"CULTURAL":        "Cultural Activities",
+	}
+	if val, ok := mapping[strings.ToUpper(category)]; ok {
+		return val
+	}
+	lower := strings.ToLower(category)
+	if len(lower) == 0 {
+		return ""
+	}
+	runes := []rune(lower)
+	if runes[0] >= 'a' && runes[0] <= 'z' {
+		runes[0] = runes[0] - 'a' + 'A'
+	}
+	return string(runes)
+}
+
+func getSemesterForActivity(activityDate time.Time, admissionYear int) int {
+	admissionStartDate := time.Date(admissionYear, time.July, 1, 0, 0, 0, 0, time.UTC)
+	if activityDate.Before(admissionStartDate) {
+		return 1
+	}
+	y1, m1, _ := admissionStartDate.Date()
+	y2, m2, _ := activityDate.Date()
+	totalMonths := int(y2-y1)*12 + int(m2-m1)
+	if totalMonths < 0 {
+		return 1
+	}
+	return (totalMonths / 6) + 1
+}
+
+func getSemesterGrade(credits int) string {
+	if credits >= 30 {
+		return "Grade O"
+	} else if credits >= 20 {
+		return "Grade A"
+	} else if credits >= 15 {
+		return "Grade B"
+	} else if credits >= 10 {
+		return "Grade C"
+	}
+	return "Grade D"
+}
+
+func getGradeAndNextInfo(totalCredits int) (string, int, string, []fiber.Map) {
+	var currentGrade string
+	var nextGrade string
+	var neededToNext int
+
+	scales := []fiber.Map{
+		{"name": "Grade O", "range": "140+", "isActive": false},
+		{"name": "Grade A", "range": "100-139", "isActive": false},
+		{"name": "Grade B", "range": "70-99", "isActive": false},
+		{"name": "Grade C", "range": "40-69", "isActive": false},
+		{"name": "Grade D", "range": "Below 40", "isActive": false},
+	}
+
+	switch {
+	case totalCredits >= 140:
+		currentGrade = "Grade O"
+		nextGrade = ""
+		neededToNext = 0
+		scales[0]["isActive"] = true
+	case totalCredits >= 100:
+		currentGrade = "Grade A"
+		nextGrade = "Grade O"
+		neededToNext = 140 - totalCredits
+		scales[1]["isActive"] = true
+	case totalCredits >= 70:
+		currentGrade = "Grade B"
+		nextGrade = "Grade A"
+		neededToNext = 100 - totalCredits
+		scales[2]["isActive"] = true
+	case totalCredits >= 40:
+		currentGrade = "Grade C"
+		nextGrade = "Grade B"
+		neededToNext = 70 - totalCredits
+		scales[3]["isActive"] = true
+	default:
+		currentGrade = "Grade D"
+		nextGrade = "Grade C"
+		neededToNext = 40 - totalCredits
+		scales[4]["isActive"] = true
+	}
+
+	return currentGrade, neededToNext, nextGrade, scales
+}
+
+func generateInsights(creditCategories []CreditCategoryResponse, neededToNext int, nextGrade string) []fiber.Map {
+	var insights []fiber.Map
+
+	var maxCat string
+	var maxCredits int
+	var minCat string
+	var minCredits = 999999
+
+	for _, cat := range creditCategories {
+		if cat.Credits > maxCredits {
+			maxCredits = cat.Credits
+			maxCat = cat.Category
+		}
+		if cat.Credits < minCredits {
+			minCredits = cat.Credits
+			minCat = cat.Category
+		}
+	}
+
+	if maxCat != "" && maxCredits > 0 {
+		insights = append(insights, fiber.Map{
+			"text": fmt.Sprintf("Your strongest contribution area is %s.", maxCat),
+			"type": "success",
+		})
+	}
+
+	if neededToNext > 0 && nextGrade != "" {
+		insights = append(insights, fiber.Map{
+			"text": fmt.Sprintf("You need %d more credits to reach %s.", neededToNext, nextGrade),
+			"type": "danger",
+		})
+	} else if nextGrade == "" {
+		insights = append(insights, fiber.Map{
+			"text": "Congratulations! You have reached the highest Grade (O).",
+			"type": "success",
+		})
+	}
+
+	if minCat != "" && minCredits < maxCredits {
+		insights = append(insights, fiber.Map{
+			"text": fmt.Sprintf("%s activities have the lowest contribution.", minCat),
+			"type": "warning",
+		})
+	}
+
+	insights = append(insights, fiber.Map{
+		"text": "Participating in upcoming hackathons or events may improve your score faster.",
+		"type": "info",
+	})
+
+	return insights
+}

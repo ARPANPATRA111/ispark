@@ -1,41 +1,37 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
+	import { API_BASE_URL } from '$lib/config';
 
-	// Student Profile Information matching Rahul Verma
-	const studentInfo = {
-		name: 'Rahul Verma',
-		rollNo: 'CSE-2K23-78',
-		enrollmentNo: 'DX7890543',
-		semester: 'VI (Sixth)',
-		course: 'B.Tech',
-		department: 'Computer Science',
-		batch: '2021 – 2026',
-		institute: 'IIPS, DAVV Indore'
-	};
+	// Student Profile Information
+	let studentInfo = $state({
+		name: 'Loading...',
+		rollNo: '...',
+		enrollmentNo: '...',
+		semester: '...',
+		course: '...',
+		department: '...',
+		batch: '...',
+		institute: '...',
+		academicYear: '...'
+	});
 
 	// Credit distribution categories
-	const creditCategories = [
-		{ category: 'Technical Skills', activities: 8, credits: 48, contribution: '41%' },
-		{ category: 'Public Speaking', activities: 4, credits: 24, contribution: '20%' },
-		{ category: 'Research', activities: 3, credits: 18, contribution: '15%' },
-		{ category: 'Social Service', activities: 3, credits: 12, contribution: '10%' },
-		{ category: 'Sports', activities: 4, credits: 10, contribution: '8%' },
-		{ category: 'Leadership', activities: 2, credits: 6, contribution: '6%' }
-	];
+	let creditCategories = $state<
+		{ category: string; activities: number; credits: number; contribution: string }[]
+	>([]);
 
 	// Totals
-	const totalActivities = 24;
-	const totalCredits = 118;
-	const totalContribution = '100%';
+	let totalActivities = $state(0);
+	let totalCredits = $state(0);
+	let totalContribution = $state('0%');
 
 	// Semester contribution summary
-	const semesterSummary = [
-		{ semester: 'Semester I', credits: 12, activities: 3, cumulative: 12 },
-		{ semester: 'Semester II', credits: 18, activities: 5, cumulative: 30 },
-		{ semester: 'Semester III', credits: 20, activities: 5, cumulative: 50 },
-		{ semester: 'Semester IV', credits: 24, activities: 6, cumulative: 74 },
-		{ semester: 'Semester V', credits: 44, activities: 9, cumulative: 118 }
-	];
+	let semesterSummary = $state<
+		{ semester: string; credits: number; activities: number; cumulative: number }[]
+	>([]);
+
+	// Final Grade
+	let finalGrade = $state('...');
 
 	// Toast State
 	let toastMessage = $state('');
@@ -64,7 +60,7 @@
 	}
 
 	function handleShare() {
-		const shareUrl = `${window.location.origin}${window.location.pathname}#verify/MARK-2026-001245`;
+		const shareUrl = `${window.location.origin}${window.location.pathname}#verify/MARK-${studentInfo.academicYear || '2025-26'}-${studentInfo.rollNo}`;
 		navigator.clipboard.writeText(shareUrl).then(
 			() => {
 				triggerToast('Verification link copied to clipboard!', 'success');
@@ -74,6 +70,50 @@
 			}
 		);
 	}
+
+	let generationDate = $derived(
+		new Date().toLocaleDateString('en-GB', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		})
+	);
+
+	let verificationUrl = $derived(
+		studentInfo.rollNo && studentInfo.rollNo !== '...'
+			? `${window.location.origin}${window.location.pathname}#verify/MARK-${studentInfo.academicYear || '2025-26'}-${studentInfo.rollNo}`
+			: ''
+	);
+
+	async function loadMarksheetData() {
+		try {
+			const token = localStorage.getItem('access_token') || '';
+			const res = await fetch(`${API_BASE_URL}/api/student/marksheet`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (res.ok) {
+				const data = await res.json();
+				studentInfo = data.student_info;
+				creditCategories = data.credit_categories;
+				totalActivities = data.total_activities;
+				totalCredits = data.total_credits;
+				totalContribution = data.total_contribution;
+				semesterSummary = data.semester_summary;
+				finalGrade = data.final_grade;
+			} else {
+				triggerToast('Failed to load marksheet data', 'error');
+			}
+		} catch (err) {
+			console.error(err);
+			triggerToast('Network error while loading marksheet', 'error');
+		}
+	}
+
+	$effect(() => {
+		loadMarksheetData();
+	});
 </script>
 
 <!-- Toast Notification -->
@@ -200,17 +240,19 @@
 
 	<!-- Marksheet Card Container -->
 	<article
-		class="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm max-w-4xl mx-auto w-full marksheet-card relative"
+		class="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm max-w-4xl mx-auto w-full marksheet-card relative overflow-hidden"
 	>
 		<!-- Transcript Blue Header Bar -->
 		<header
-			class="bg-[#0B1535] text-white p-6 rounded-t flex flex-col md:flex-row justify-between items-center text-center md:text-left gap-4"
+			class="bg-[#0B1535] text-white py-6 px-8 sm:px-12 rounded-t-xl -mx-8 -mt-8 sm:-mx-12 sm:-mt-12 mb-8 flex flex-col md:flex-row justify-between items-center text-center md:text-left gap-4"
 		>
 			<div class="flex flex-col gap-1">
 				<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none"
 					>OFFICIAL DOCUMENT</span
 				>
-				<span class="text-xs font-semibold text-slate-200 mt-1">Academic Year 2025–26</span>
+				<span class="text-xs font-semibold text-slate-200 mt-1"
+					>Academic Year {studentInfo.academicYear || '2025-26'}</span
+				>
 			</div>
 
 			<div class="flex flex-col items-center">
@@ -370,7 +412,8 @@
 					<span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
 						>FINAL GRADE AWARDED</span
 					>
-					<span class="text-2xl font-serif font-black italic text-[#881B1B] pr-4">Grade A</span>
+					<span class="text-2xl font-serif font-black italic text-[#881B1B] pr-4">{finalGrade}</span
+					>
 				</div>
 			</section>
 
@@ -432,7 +475,8 @@
 					The student has actively participated in extracurricular and co-curricular activities and
 					has successfully fulfilled the requirements prescribed under the iSPARC framework. The
 					records presented in this marksheet are based on verified certificates and approved
-					activity logs maintained within the iSPARC Portal for Academic Year 2025-26.
+					activity logs maintained within the iSPARC Portal for Academic Year {studentInfo.academicYear ||
+						'2025-26'}.
 				</div>
 			</section>
 
@@ -451,13 +495,13 @@
 					<div class="text-center flex flex-col items-center">
 						<span
 							class="font-serif italic text-base text-[#0B1535] font-medium h-10 flex items-center justify-center"
-							>Dr. A. Sharma</span
+							>Faculty Mentor Signature</span
 						>
 						<hr class="border-t border-slate-350 w-44 my-2" />
-						<span class="text-xs font-bold text-slate-800 block">Dr. A. Sharma</span>
+						<span class="text-xs font-bold text-slate-800 block">Faculty Mentor</span>
 						<span
 							class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mt-1"
-							>Faculty Mentor, Dept. of Computer Applications</span
+							>Dept. of Computer Applications</span
 						>
 					</div>
 
@@ -466,67 +510,28 @@
 						<div
 							class="border border-slate-200 p-2 bg-white rounded shadow-3xs flex flex-col items-center gap-1"
 						>
-							<!-- Custom design high fidelity QR code SVG -->
-							<svg class="w-16 h-16 text-[#0B1535]" viewBox="0 0 100 100" fill="currentColor">
-								<!-- Finder Pattern top-left -->
-								<rect x="0" y="0" width="28" height="28" />
-								<rect x="4" y="4" width="20" height="20" fill="white" />
-								<rect x="8" y="8" width="12" height="12" />
-
-								<!-- Finder Pattern top-right -->
-								<rect x="72" y="0" width="28" height="28" />
-								<rect x="76" y="4" width="20" height="20" fill="white" />
-								<rect x="80" y="8" width="12" height="12" />
-
-								<!-- Finder Pattern bottom-left -->
-								<rect x="0" y="72" width="28" height="28" />
-								<rect x="4" y="76" width="20" height="20" fill="white" />
-								<rect x="8" y="80" width="12" height="12" />
-
-								<!-- QR random block patterns to simulate high resolution QR code -->
-								<rect x="36" y="0" width="8" height="8" />
-								<rect x="48" y="4" width="8" height="8" />
-								<rect x="60" y="0" width="8" height="16" />
-
-								<rect x="36" y="16" width="12" height="8" />
-								<rect x="52" y="20" width="8" height="8" />
-								<rect x="64" y="24" width="4" height="4" />
-
-								<rect x="0" y="36" width="8" height="12" />
-								<rect x="12" y="40" width="12" height="8" />
-								<rect x="28" y="36" width="16" height="16" />
-								<rect x="32" y="40" width="8" height="8" fill="white" />
-
-								<rect x="48" y="36" width="8" height="8" />
-								<rect x="60" y="40" width="16" height="8" />
-								<rect x="84" y="36" width="16" height="12" />
-
-								<rect x="0" y="52" width="12" height="8" />
-								<rect x="16" y="56" width="8" height="8" />
-								<rect x="28" y="56" width="12" height="12" />
-
-								<rect x="48" y="52" width="16" height="16" />
-								<rect x="52" y="56" width="8" height="8" fill="white" />
-								<rect x="68" y="52" width="8" height="12" />
-								<rect x="80" y="56" width="12" height="8" />
-
-								<rect x="36" y="72" width="8" height="8" />
-								<rect x="48" y="76" width="12" height="12" />
-								<rect x="64" y="72" width="4" height="4" />
-
-								<rect x="36" y="88" width="16" height="8" />
-								<rect x="56" y="92" width="8" height="8" />
-
-								<rect x="76" y="76" width="16" height="16" />
-								<rect x="80" y="80" width="8" height="8" fill="white" />
-							</svg>
+							{#if verificationUrl}
+								<img
+									src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={encodeURIComponent(
+										verificationUrl
+									)}"
+									alt="Verification QR Code"
+									class="w-16 h-16"
+								/>
+							{:else}
+								<div class="w-16 h-16 bg-slate-100 animate-pulse rounded"></div>
+							{/if}
 							<span class="text-[8px] font-bold text-slate-400 tracking-wider uppercase mt-1"
 								>Scan to verify</span
 							>
 						</div>
 						<div class="text-[9px] text-slate-500 font-semibold tracking-wide">
-							<p>Document ID: <strong class="text-slate-800">MARK-2026-001245</strong></p>
-							<p class="mt-0.5">Generated: 24 Jun 2026</p>
+							<p>
+								Document ID: <strong class="text-slate-800"
+									>MARK-{studentInfo.academicYear || '2025-26'}-{studentInfo.rollNo}</strong
+								>
+							</p>
+							<p class="mt-0.5">Generated: {generationDate}</p>
 						</div>
 					</div>
 
@@ -534,13 +539,13 @@
 					<div class="text-center flex flex-col items-center">
 						<span
 							class="font-serif italic text-base text-[#0B1535] font-medium h-10 flex items-center justify-center font-serif"
-							>Prof. R. Joshi</span
+							>Coordinator Signature</span
 						>
 						<hr class="border-t border-slate-350 w-44 my-2" />
-						<span class="text-xs font-bold text-slate-800 block">Prof. R. Joshi</span>
+						<span class="text-xs font-bold text-slate-800 block">iSPARC Coordinator</span>
 						<span
 							class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mt-1"
-							>iSPARC Coordinator, IIPS DAVV</span
+							>IIPS, DAVV Indore</span
 						>
 					</div>
 				</div>
