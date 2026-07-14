@@ -10,6 +10,7 @@
 	import AdminStudentManagementView from './AdminStudentManagementView.svelte';
 	import AdminCertificateVerificationView from './AdminCertificateVerificationView.svelte';
 	import AdminProfileView from './AdminProfileView.svelte';
+	import AdminEditProfileView from './AdminEditProfileView.svelte';
 
 	interface AdminProfile {
 		admin_id: string;
@@ -487,7 +488,18 @@
 			{:else if currentTab === 'Batch Analytics'}
 				<BatchAnalyticsView />
 			{:else if currentTab === 'Profile'}
-				<AdminProfileView {admin} {loading} {error} />
+				<AdminProfileView
+					{admin}
+					{loading}
+					{error}
+					onEditProfile={() => (currentTab = 'Edit Profile')}
+				/>
+			{:else if currentTab === 'Edit Profile'}
+				<AdminEditProfileView
+					{admin}
+					onSave={(updated) => (admin = updated)}
+					onCancel={() => (currentTab = 'Profile')}
+				/>
 			{:else}
 				<AdminPlaceholderView
 					tabName={currentTab}

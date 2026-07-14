@@ -209,3 +209,45 @@ func GetAdminProfile(c *fiber.Ctx) error {
 		},
 	})
 }
+
+// PUT /api/admin/profile -> Update authenticated admin details
+func UpdateAdminProfile(c *fiber.Ctx) error {
+	admin, err := getAuthenticatedAdmin(c)
+	if err != nil {
+		return err
+	}
+
+	type ProfileUpdate struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+
+	var input ProfileUpdate
+	if err := c.BodyParser(&input); err != nil {
+		return errJSON(c, fiber.StatusBadRequest, "Cannot parse JSON")
+	}
+
+	if input.Name == "" || input.Email == "" {
+		return errJSON(c, fiber.StatusBadRequest, "Name and Email are required")
+	}
+
+	admin.Name = input.Name
+	admin.Email = input.Email
+
+	if err := config.DB.Save(admin).Error; err != nil {
+		return errJSON(c, fiber.StatusInternalServerError, "Failed to update profile")
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Profile updated successfully",
+		"admin": fiber.Map{
+			"admin_id":       admin.AdminID,
+			"name":           admin.Name,
+			"email":          admin.Email,
+			"role":           admin.Role,
+			"assigned_batch": admin.AssignedBatch,
+			"created_at":     admin.CreatedAt,
+			"updated_at":     admin.UpdatedAt,
+		},
+	})
+}

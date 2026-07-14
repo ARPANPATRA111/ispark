@@ -57,6 +57,7 @@ func SetupRoutes(app *fiber.App) {
 	admin.Post("/change-password", controllers.AdminChangePassword)
 
 	admin.Get("/profile", controllers.GetAdminProfile)
+	admin.Put("/profile", controllers.UpdateAdminProfile)
 	admin.Get("/students", controllers.GetAllStudents)
 	admin.Get("/students/:roll", controllers.GetStudentDetail)
 

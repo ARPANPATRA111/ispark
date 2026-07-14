@@ -25,11 +25,13 @@
 	let {
 		admin,
 		loading,
-		error
+		error,
+		onEditProfile
 	}: {
 		admin: AdminProfile | null;
 		loading: boolean;
 		error: string | null;
+		onEditProfile: () => void;
 	} = $props();
 
 	// Stats state using Svelte 5 runes
@@ -40,14 +42,6 @@
 	let pendingReviewsCount = $state(0);
 	let activitiesSupervisedCount = $state(0);
 	let assignedBatches = $state<BatchInfo[]>([]);
-
-	// Edit Profile form state
-	let isEditProfileOpen = $state(false);
-	let editName = $state('');
-	let editEmail = $state('');
-	let isEditSubmitting = $state(false);
-	let editError = $state<string | null>(null);
-	let editSuccess = $state<string | null>(null);
 
 	// Change Password form state
 	let isChangePasswordOpen = $state(false);
@@ -75,67 +69,6 @@
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
 
-	function getEmployeeId(adminId: string): string {
-		if (adminId === 'admin') return 'EMP-2026-014';
-		if (adminId === 'admin2') return 'EMP-2026-015';
-		if (adminId === 'superadmin') return 'EMP-2026-001';
-		return `EMP-2026-${adminId.toUpperCase()}`;
-	}
-
-	function openEditProfile() {
-		if (admin) {
-			editName = admin.name;
-			editEmail = admin.email;
-			editError = null;
-			editSuccess = null;
-			isEditProfileOpen = true;
-		}
-	}
-
-	async function handleEditProfile(e: SubmitEvent) {
-		e.preventDefault();
-		if (!editName.trim() || !editEmail.trim()) {
-			editError = 'All fields are required';
-			return;
-		}
-
-		isEditSubmitting = true;
-		editError = null;
-		editSuccess = null;
-
-		try {
-			// Simulating API call since there is no update endpoint in the backend for admin profile.
-			// Prepare the frontend for API integration without inventing one.
-			/*
-			const token = localStorage.getItem('admin_token');
-			const res = await fetch(`${API_BASE_URL}/api/admin/profile`, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${token}`
-				},
-				body: JSON.stringify({ name: editName, email: editEmail })
-			});
-			if (!res.ok) throw new Error('Failed to update profile');
-			*/
-			await new Promise((resolve) => setTimeout(resolve, 800));
-
-			if (admin) {
-				admin.name = editName;
-				admin.email = editEmail;
-			}
-
-			editSuccess = 'Profile updated successfully (Simulated: Backend API pending)';
-			setTimeout(() => {
-				isEditProfileOpen = false;
-			}, 1500);
-		} catch (err) {
-			editError = err instanceof Error ? err.message : 'Failed to update profile';
-		} finally {
-			isEditSubmitting = false;
-		}
-	}
-
 	function openChangePassword() {
 		currentPassword = '';
 		newPassword = '';
@@ -155,8 +88,16 @@
 			passwordError = 'New passwords do not match';
 			return;
 		}
-		if (newPassword.length < 6) {
-			passwordError = 'Password must be at least 6 characters long';
+
+		const isMinLength = newPassword.length >= 8;
+		const hasUppercase = /[A-Z]/.test(newPassword);
+		const hasLowercase = /[a-z]/.test(newPassword);
+		const hasNumber = /\d/.test(newPassword);
+		const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
+
+		if (!isMinLength || !hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+			passwordError =
+				'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.';
 			return;
 		}
 
@@ -349,7 +290,7 @@
 							<!-- Edit Profile button -->
 							<button
 								type="button"
-								onclick={openEditProfile}
+								onclick={onEditProfile}
 								class="inline-flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-250 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-bold transition-colors shadow-3xs cursor-pointer focus:outline-none"
 							>
 								<svg
@@ -414,9 +355,7 @@
 							</svg>
 							<div class="flex items-center gap-1.5">
 								<span class="text-slate-500 font-semibold">Department:</span>
-								<span class="font-bold text-slate-800">
-									{admin.assigned_batch ? 'Computer Applications' : '—'}
-								</span>
+								<span class="font-bold text-slate-800">-</span>
 							</div>
 						</div>
 
@@ -438,7 +377,7 @@
 							</svg>
 							<div class="flex items-center gap-1.5">
 								<span class="text-slate-500 font-semibold">Employee ID:</span>
-								<span class="font-bold text-slate-800">{getEmployeeId(admin.admin_id)}</span>
+								<span class="font-bold text-slate-800">{admin.admin_id}</span>
 							</div>
 						</div>
 
@@ -482,9 +421,7 @@
 							</svg>
 							<div class="flex items-center gap-1.5">
 								<span class="text-slate-500 font-semibold">Contact:</span>
-								<span class="font-bold text-slate-800">
-									{admin.assigned_batch ? '+91 XXXXX XXXXX' : '—'}
-								</span>
+								<span class="font-bold text-slate-800">-</span>
 							</div>
 						</div>
 
@@ -511,9 +448,7 @@
 							</svg>
 							<div class="flex items-center gap-1.5">
 								<span class="text-slate-500 font-semibold">Office Location:</span>
-								<span class="font-bold text-slate-800">
-									{admin.assigned_batch ? 'IIPS, Block B' : '—'}
-								</span>
+								<span class="font-bold text-slate-800">-</span>
 							</div>
 						</div>
 					</div>
@@ -549,9 +484,7 @@
 						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
 							>Department</span
 						>
-						<span class="text-xs font-bold text-slate-800 mt-2">
-							{admin.assigned_batch ? 'Computer Applications' : '—'}
-						</span>
+						<span class="text-xs font-bold text-slate-800 mt-2">-</span>
 					</div>
 
 					<!-- Years of Experience -->
@@ -989,112 +922,6 @@
 		</div>
 	{/if}
 </div>
-
-<!-- Edit Profile Modal Overlay -->
-{#if isEditProfileOpen}
-	<div
-		class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
-		transition:fade={{ duration: 100 }}
-	>
-		<div
-			class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4"
-		>
-			<div>
-				<h3 class="text-lg font-bold text-slate-900 font-serif leading-tight">Edit Profile</h3>
-				<p class="text-xs text-slate-500 font-medium mt-1">
-					Update your account display name and email address.
-				</p>
-			</div>
-
-			<form onsubmit={handleEditProfile} class="space-y-4">
-				{#if editError}
-					<div
-						class="p-3 text-xs font-semibold text-rose-650 bg-rose-50 border border-rose-100 rounded-lg"
-					>
-						{editError}
-					</div>
-				{/if}
-				{#if editSuccess}
-					<div
-						class="p-3 text-xs font-semibold text-emerald-650 bg-emerald-50 border border-emerald-100 rounded-lg"
-					>
-						{editSuccess}
-					</div>
-				{/if}
-
-				<div class="space-y-1.5">
-					<label
-						for="edit-name"
-						class="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Full Name</label
-					>
-					<input
-						id="edit-name"
-						type="text"
-						bind:value={editName}
-						disabled={isEditSubmitting}
-						class="w-full px-3 py-2 border border-slate-200 focus:border-slate-350 focus:ring-1 focus:ring-slate-350 rounded-lg text-sm focus:outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
-					/>
-				</div>
-
-				<div class="space-y-1.5">
-					<label
-						for="edit-email"
-						class="text-[10px] font-bold text-slate-450 uppercase tracking-wider"
-						>Email Address</label
-					>
-					<input
-						id="edit-email"
-						type="email"
-						bind:value={editEmail}
-						disabled={isEditSubmitting}
-						class="w-full px-3 py-2 border border-slate-200 focus:border-slate-350 focus:ring-1 focus:ring-slate-350 rounded-lg text-sm focus:outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
-					/>
-				</div>
-
-				<div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-					<button
-						type="button"
-						onclick={() => (isEditProfileOpen = false)}
-						disabled={isEditSubmitting}
-						class="px-4 py-2 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 bg-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none"
-					>
-						Cancel
-					</button>
-					<button
-						type="submit"
-						disabled={isEditSubmitting}
-						class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#0B1535] hover:bg-[#1a2b5e] disabled:bg-[#0b1535]/50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none"
-					>
-						{#if isEditSubmitting}
-							<svg
-								class="animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white"
-								fill="none"
-								viewBox="0 0 24 24"
-							>
-								<circle
-									class="opacity-25"
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="4"
-								></circle>
-								<path
-									class="opacity-75"
-									fill="currentColor"
-									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								></path>
-							</svg>
-							Saving...
-						{:else}
-							Save Changes
-						{/if}
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}
 
 <!-- Change Password Modal Overlay -->
 {#if isChangePasswordOpen}
