@@ -77,7 +77,7 @@ func getAdminStats(admin *models.Admin) fiber.Map {
 	certQueryPending.Where("status = ?", "Pending").Count(&pendingReviews)
 
 	// 4. Activities Supervised
-	config.DB.Model(&models.Activity{}).Where("coordinator = ?", admin.Name).Count(&supervisedActivities)
+	config.DB.Model(&models.Activity{}).Where("coordinator_id = ?", admin.AdminID).Count(&supervisedActivities)
 
 	return fiber.Map{
 		"assigned_students":     assignedStudents,

@@ -408,217 +408,143 @@
 		{/if}
 	</div>
 
-	<!-- Professional Information & Administrative Overview Row -->
+	<!-- Administrative Overview Row (DB-backed statistics only) -->
 	{#if !loading && !error && admin}
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-			<!-- Professional Information Card -->
-			<div class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col">
-				<h3 class="text-xs font-bold text-slate-405 tracking-wider uppercase font-sans mb-5">
-					Professional Information
-				</h3>
+		<div class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col mb-6">
+			<h3 class="text-xs font-bold text-slate-405 tracking-wider uppercase font-sans mb-5">
+				Administrative Overview
+			</h3>
 
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow">
-					<!-- Designation -->
+			<!-- Stats Content -->
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-grow">
+				<!-- Assigned Students -->
+				<div
+					class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
+				>
 					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
+						class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0"
 					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Designation</span
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4"
 						>
-						<span class="text-xs font-bold text-slate-400 mt-2">—</span>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0 1 10.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 0 1 7.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0 0 10.089 15c-1.47 0-2.854.34-4.082.945"
+							/>
+						</svg>
 					</div>
+					<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
+						{stats?.assigned_students ?? 0}
+					</span>
+					<span
+						class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
+					>
+						Assigned Students
+					</span>
+				</div>
 
-					<!-- Department -->
+				<!-- Certificates Verified -->
+				<div
+					class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
+				>
 					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
+						class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0"
 					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Department</span
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4"
 						>
-						<span class="text-xs font-bold text-slate-800 mt-2">-</span>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"
+							/>
+						</svg>
 					</div>
+					<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
+						{stats?.verified_certificates ?? 0}
+					</span>
+					<span
+						class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
+					>
+						Certificates Verified
+					</span>
+				</div>
 
-					<!-- Years of Experience -->
+				<!-- Pending Reviews -->
+				<div
+					class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
+				>
 					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
+						class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0"
 					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Years of Experience</span
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4"
 						>
-						<span class="text-xs font-bold text-slate-400 mt-2">—</span>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+							/>
+						</svg>
 					</div>
+					<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
+						{stats?.pending_reviews ?? 0}
+					</span>
+					<span
+						class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
+					>
+						Pending Reviews
+					</span>
+				</div>
 
-					<!-- Qualification -->
+				<!-- Activities Supervised -->
+				<div
+					class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
+				>
 					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
+						class="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0"
 					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Qualification</span
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4"
 						>
-						<span class="text-xs font-bold text-slate-400 mt-2">—</span>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"
+							/>
+						</svg>
 					</div>
-
-					<!-- Specialization -->
-					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
+					<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
+						{stats?.supervised_activities ?? 0}
+					</span>
+					<span
+						class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
 					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Specialization</span
-						>
-						<span class="text-xs font-bold text-slate-400 mt-2">—</span>
-					</div>
-
-					<!-- Mentor Since -->
-					<div
-						class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col justify-between"
-					>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none"
-							>Mentor Since</span
-						>
-						<span class="text-xs font-bold text-slate-400 mt-2">—</span>
-					</div>
+						Activities Supervised
+					</span>
 				</div>
 			</div>
-
-			<!-- Administrative Overview Row (DB-backed statistics only) -->
-			{#if !loading && !error && admin}
-				<div class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col">
-					<h3 class="text-xs font-bold text-slate-405 tracking-wider uppercase font-sans mb-5">
-						Administrative Overview
-					</h3>
-
-					<!-- Stats Content -->
-					<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-grow">
-						<!-- Assigned Students -->
-						<div
-							class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
-						>
-							<div
-								class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="w-4 h-4"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0 1 10.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 0 1 7.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0 0 10.089 15c-1.47 0-2.854.34-4.082.945"
-									/>
-								</svg>
-							</div>
-							<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
-								{stats?.assigned_students ?? 0}
-							</span>
-							<span
-								class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
-							>
-								Assigned Students
-							</span>
-						</div>
-
-						<!-- Certificates Verified -->
-						<div
-							class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
-						>
-							<div
-								class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="w-4 h-4"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"
-									/>
-								</svg>
-							</div>
-							<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
-								{stats?.verified_certificates ?? 0}
-							</span>
-							<span
-								class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
-							>
-								Certificates Verified
-							</span>
-						</div>
-
-						<!-- Pending Reviews -->
-						<div
-							class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
-						>
-							<div
-								class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="w-4 h-4"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-									/>
-								</svg>
-							</div>
-							<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
-								{stats?.pending_reviews ?? 0}
-							</span>
-							<span
-								class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
-							>
-								Pending Reviews
-							</span>
-						</div>
-
-						<!-- Activities Supervised -->
-						<div
-							class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col items-center text-center justify-center hover:shadow-2xs transition-shadow"
-						>
-							<div
-								class="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="w-4 h-4"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"
-									/>
-								</svg>
-							</div>
-							<span class="text-2xl font-bold font-serif text-slate-900 mt-3 leading-none">
-								{stats?.supervised_activities ?? 0}
-							</span>
-							<span
-								class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2 leading-tight"
-							>
-								Activities Supervised
-							</span>
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 	{/if}
 

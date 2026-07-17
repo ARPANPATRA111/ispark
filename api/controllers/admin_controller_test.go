@@ -450,3 +450,102 @@ func TestAdminChangePassword(t *testing.T) {
 		}
 	})
 }
+
+func TestSupervisedActivitiesStableOnNameChange(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("test-jwt-", 4))
+	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("test-refresh-jwt-", 4))
+
+	SetupTestDB(t)
+
+	app := fiber.New()
+	routes.SetupRoutes(app)
+
+	// 1. Seed an admin and their supervised activities
+	hashedPassword, _ := utils.HashPassword("Password123!")
+	testAdmin := models.Admin{
+		AdminID:       "stableadmin",
+		Name:          "Original Name",
+		Email:         "stable.admin@isparc.dev",
+		Password:      hashedPassword,
+		Role:          "admin",
+		AssignedBatch: "IT2K24",
+	}
+	config.DB.Create(&testAdmin)
+
+	testActivity := models.Activity{
+		Name:          "Stable Identifier Test Activity",
+		Category:      "TECHNICAL",
+		Credits:       10,
+		Mode:          "Offline",
+		Coordinator:   "Original Name",
+		CoordinatorID: "stableadmin",
+	}
+	config.DB.Create(&testActivity)
+
+	token, err := utils.GenerateAccessToken(testAdmin.AdminID, testAdmin.Email, testAdmin.Role)
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// 2. Fetch profile initially and assert count is 1
+	t.Run("InitialCountIsOne", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/profile", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("Failed to execute request: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200, got %d", resp.StatusCode)
+		}
+
+		var respBody map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		stats := respBody["stats"].(map[string]interface{})
+		supervisedCount := int64(stats["supervised_activities"].(float64))
+		if supervisedCount != 1 {
+			t.Errorf("Expected supervised_activities to be 1, got %d", supervisedCount)
+		}
+	})
+
+	// 3. Update admin name
+	t.Run("UpdateNameAndCheckCountIsStillOne", func(t *testing.T) {
+		body := `{"name":"New Updated Name","email":"stable.admin@isparc.dev"}`
+		req := httptest.NewRequest("PUT", "/api/admin/profile", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("Failed to execute request: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200, got %d", resp.StatusCode)
+		}
+
+		// Fetch profile again and assert stats supervised count is still 1
+		reqGet := httptest.NewRequest("GET", "/api/admin/profile", nil)
+		reqGet.Header.Set("Authorization", "Bearer "+token)
+
+		respGet, err := app.Test(reqGet)
+		if err != nil {
+			t.Fatalf("Failed to execute request: %v", err)
+		}
+		if respGet.StatusCode != http.StatusOK {
+			t.Fatalf("Expected 200, got %d", respGet.StatusCode)
+		}
+
+		var respBody map[string]interface{}
+		if err := json.NewDecoder(respGet.Body).Decode(&respBody); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		stats := respBody["stats"].(map[string]interface{})
+		supervisedCount := int64(stats["supervised_activities"].(float64))
+		if supervisedCount != 1 {
+			t.Errorf("Expected supervised_activities to still be 1, got %d", supervisedCount)
+		}
+	})
+}
