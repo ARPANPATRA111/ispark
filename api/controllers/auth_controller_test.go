@@ -24,6 +24,7 @@ var testDBOnce sync.Once
 
 // SetupTestDB initializes an in-memory SQLite database for testing and overrides config.DB exactly once
 func SetupTestDB(t *testing.T) {
+	t.Setenv("TESTING", "true")
 	testDBOnce.Do(func() {
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		if err != nil {
