@@ -7,34 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/gofiber/fiber/v2"
 	"github.com/iips-oss/ispark/api/config"
 	"github.com/iips-oss/ispark/api/models"
 	"github.com/iips-oss/ispark/api/routes"
 	"github.com/iips-oss/ispark/api/utils"
-	"gorm.io/gorm"
 )
-
-func SetupAdminTestDB(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("Failed to connect to SQLite: %v", err)
-	}
-
-	err = db.AutoMigrate(&models.Admin{})
-	if err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	config.DB = db
-}
 
 func TestGetAdminProfile(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("test-jwt-", 4))
 	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("test-refresh-jwt-", 4))
 
-	SetupAdminTestDB(t)
+	SetupTestDB(t)
 
 	app := fiber.New()
 	routes.SetupRoutes(app)
@@ -113,7 +97,7 @@ func TestUpdateAdminProfile(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("test-jwt-", 4))
 	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("test-refresh-jwt-", 4))
 
-	SetupAdminTestDB(t)
+	SetupTestDB(t)
 
 	app := fiber.New()
 	routes.SetupRoutes(app)
@@ -317,7 +301,7 @@ func TestAdminChangePassword(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("test-jwt-", 4))
 	t.Setenv("JWT_REFRESH_SECRET", strings.Repeat("test-refresh-jwt-", 4))
 
-	SetupAdminTestDB(t)
+	SetupTestDB(t)
 
 	app := fiber.New()
 	routes.SetupRoutes(app)
