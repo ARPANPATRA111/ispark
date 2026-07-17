@@ -177,7 +177,6 @@
 		Math.min(Math.round((totalCreditsEarned / 200) * 100), 100)
 	);
 
-	
 	const recentUpdates: RecentUpdate[] = $derived.by(() => {
 		if (registeredActivities.length > 0) {
 			return registeredActivities.slice(0, 3).map((act) => {
