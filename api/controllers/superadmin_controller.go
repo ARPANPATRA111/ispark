@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,6 +13,13 @@ import (
 	"github.com/iips-oss/ispark/api/utils"
 	"gorm.io/gorm"
 )
+
+// allowedSettingStatuses is the set of statuses a system setting may hold.
+var allowedSettingStatuses = map[string]bool{
+	"Active":   true,
+	"Enabled":  true,
+	"Disabled": true,
+}
 
 // platformUser is the flattened shape the super admin user registry renders.
 // Students and admins are different tables, so they are normalised here.
@@ -326,4 +334,146 @@ func DeletePlatformUser(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "User deleted successfully"})
+}
+
+// ---------------------------------------------------------------------------
+// System Settings
+// ---------------------------------------------------------------------------
+
+// groupSettingsByCategory loads every setting ordered by SortOrder and groups
+// them under their category, which is the shape the super admin settings screen
+// renders (one list per tab).
+func groupSettingsByCategory() (map[string][]models.SystemSetting, error) {
+	var settings []models.SystemSetting
+	if err := config.DB.Order("sort_order asc").Find(&settings).Error; err != nil {
+		return nil, err
+	}
+
+	grouped := make(map[string][]models.SystemSetting)
+	for _, setting := range settings {
+		grouped[setting.Category] = append(grouped[setting.Category], setting)
+	}
+
+	return grouped, nil
+}
+
+// GetPlatformSettings returns every platform setting grouped by category for the
+// super admin System Settings screen.
+func GetPlatformSettings(c *fiber.Ctx) error {
+	grouped, err := groupSettingsByCategory()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to load settings",
+		})
+	}
+
+	return c.JSON(fiber.Map{"settings": grouped})
+}
+
+// UpdatePlatformSetting updates a single setting's value and/or status.
+func UpdatePlatformSetting(c *fiber.Ctx) error {
+	key := c.Params("key")
+
+	var input models.UpdateSettingInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
+	}
+
+	if input.Value == nil && input.Status == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Nothing to update: provide a value or a status",
+		})
+	}
+
+	if input.Status != nil && !allowedSettingStatuses[*input.Status] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Status must be one of Active, Enabled or Disabled",
+		})
+	}
+
+	var setting models.SystemSetting
+	if err := config.DB.Where("key = ?", key).First(&setting).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Setting not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to load setting"})
+	}
+
+	if input.Value != nil {
+		setting.Value = strings.TrimSpace(*input.Value)
+	}
+	if input.Status != nil {
+		setting.Status = *input.Status
+	}
+
+	if err := config.DB.Save(&setting).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update setting"})
+	}
+
+	return c.JSON(fiber.Map{"setting": setting})
+}
+
+// UpdatePlatformSettings applies several setting updates in one request. It is
+// what the settings screen's "Save" action uses so a whole tab can be persisted
+// at once. All updates run in a transaction: if any key is unknown or invalid,
+// nothing is written.
+func UpdatePlatformSettings(c *fiber.Ctx) error {
+	var input struct {
+		Settings []models.BulkSettingUpdate `json:"settings"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
+	}
+
+	if len(input.Settings) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No settings provided"})
+	}
+
+	// Validate everything up front so the transaction never partially applies.
+	for _, item := range input.Settings {
+		if strings.TrimSpace(item.Key) == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Each setting must include a key"})
+		}
+		if item.Value == nil && item.Status == nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Setting %q has nothing to update", item.Key),
+			})
+		}
+		if item.Status != nil && !allowedSettingStatuses[*item.Status] {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Invalid status %q for setting %q", *item.Status, item.Key),
+			})
+		}
+	}
+
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		for _, item := range input.Settings {
+			updates := map[string]any{}
+			if item.Value != nil {
+				updates["value"] = strings.TrimSpace(*item.Value)
+			}
+			if item.Status != nil {
+				updates["status"] = *item.Status
+			}
+
+			res := tx.Model(&models.SystemSetting{}).Where("key = ?", item.Key).Updates(updates)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return fmt.Errorf("setting %q not found", item.Key)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	grouped, err := groupSettingsByCategory()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to reload settings"})
+	}
+
+	return c.JSON(fiber.Map{"settings": grouped})
 }

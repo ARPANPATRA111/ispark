@@ -95,7 +95,7 @@
 			return;
 		}
 
-		await loadPlatformData();
+		await Promise.all([loadPlatformData(), loadSettings()]);
 	});
 
 	// Sidebar menu items list for Super Admin Portal
@@ -264,6 +264,7 @@
 	// ── System Settings (Step 7) ────────────────────────────────────────────────
 	type SettingStatus = 'Active' | 'Enabled' | 'Disabled';
 	interface PlatformSetting {
+		key: string;
 		name: string;
 		description: string;
 		value: string;
@@ -281,176 +282,31 @@
 
 	let activeSettingsTab = $state('Academic Year');
 
-	let settingsSections = $state<Record<string, PlatformSetting[]>>({
-		'Academic Year': [
-			{
-				name: 'Current Academic Year',
-				description: 'Active academic cycle label displayed platform-wide',
-				value: '2025-2026',
-				status: 'Active'
-			},
-			{
-				name: 'Academic Year Start Date',
-				description: 'Official start date of the current academic year',
-				value: 'Aug 1, 2025',
-				status: 'Active'
-			},
-			{
-				name: 'Academic Year End Date',
-				description: 'Official end date of the current academic year',
-				value: 'May 31, 2026',
-				status: 'Active'
-			},
-			{
-				name: 'Enrollment Deadline',
-				description: 'Last date for activity enrollment submissions',
-				value: 'Sep 15, 2025',
-				status: 'Active'
+	// Settings are loaded from the API on mount; see loadSettings().
+	let settingsSections = $state<Record<string, PlatformSetting[]>>({});
+
+	async function loadSettings() {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/settings`, {
+				headers: authHeaders()
+			});
+
+			if (res.status === 401) {
+				localStorage.removeItem('superadmin_token');
+				await goto('/super-admin-portal');
+				return;
 			}
-		],
-		'Credit Policy': [
-			{
-				name: 'Minimum Credits Required',
-				description: 'Total credits a student must earn to graduate',
-				value: '100',
-				status: 'Active'
-			},
-			{
-				name: 'Maximum Credits per Activity',
-				description: 'Upper cap on credits from a single activity',
-				value: '20',
-				status: 'Active'
-			},
-			{
-				name: 'Minimum Credits per Semester',
-				description: 'Credits a student must earn each semester',
-				value: '12',
-				status: 'Active'
-			},
-			{
-				name: 'Credit Rollover',
-				description: 'Carry unused credits to the next academic year',
-				value: 'Enabled',
-				status: 'Enabled'
-			},
-			{
-				name: 'Grace Credit Buffer',
-				description: 'Extra credits allowed beyond the target',
-				value: '5',
-				status: 'Active'
+
+			if (!res.ok) {
+				throw new Error('Failed to load settings');
 			}
-		],
-		'Activity Rules': [
-			{
-				name: 'Max Active Enrollments',
-				description: 'Activities a student can be enrolled in at once',
-				value: '5',
-				status: 'Active'
-			},
-			{
-				name: 'Mentor Approval Required',
-				description: 'Require mentor sign-off before credit is granted',
-				value: 'Enabled',
-				status: 'Enabled'
-			},
-			{
-				name: 'Auto-Verification Threshold',
-				description: 'Score above which certificates auto-verify',
-				value: '90%',
-				status: 'Active'
-			},
-			{
-				name: 'Self-Reported Activities',
-				description: 'Allow students to log their own activities',
-				value: 'Disabled',
-				status: 'Disabled'
-			},
-			{
-				name: 'Resubmission Window',
-				description: 'Days allowed to resubmit a rejected certificate',
-				value: '7 days',
-				status: 'Active'
-			}
-		],
-		Notifications: [
-			{
-				name: 'Email Notifications',
-				description: 'Send system emails for key events',
-				value: 'Enabled',
-				status: 'Enabled'
-			},
-			{
-				name: 'OTP Expiry Duration',
-				description: 'Validity window for verification codes',
-				value: '15 min',
-				status: 'Active'
-			},
-			{
-				name: 'Reminder Frequency',
-				description: 'How often pending-task reminders are sent',
-				value: 'Weekly',
-				status: 'Active'
-			},
-			{
-				name: 'Announcement Broadcasts',
-				description: 'Push platform-wide announcements to all users',
-				value: 'Enabled',
-				status: 'Enabled'
-			}
-		],
-		Platform: [
-			{
-				name: 'Platform Name',
-				description: 'Display name shown across the portal',
-				value: 'iSPARC',
-				status: 'Active'
-			},
-			{
-				name: 'Maintenance Mode',
-				description: 'Temporarily disable access for non-admins',
-				value: 'Disabled',
-				status: 'Disabled'
-			},
-			{
-				name: 'Default Time Zone',
-				description: 'Base time zone for schedules and logs',
-				value: 'IST (UTC+5:30)',
-				status: 'Active'
-			},
-			{
-				name: 'Default Language',
-				description: 'Default interface language for new users',
-				value: 'English',
-				status: 'Active'
-			}
-		],
-		Security: [
-			{
-				name: 'Minimum Password Length',
-				description: 'Required characters for user passwords',
-				value: '8',
-				status: 'Active'
-			},
-			{
-				name: 'Session Timeout',
-				description: 'Idle minutes before automatic logout',
-				value: '30 min',
-				status: 'Active'
-			},
-			{
-				name: 'Two-Factor Authentication',
-				description: 'Require 2FA for admin accounts',
-				value: 'Enabled',
-				status: 'Enabled'
-			},
-			{
-				name: 'Max Login Attempts',
-				description: 'Failed logins before temporary lockout',
-				value: '5',
-				status: 'Active'
-			}
-		]
-	});
+
+			const { settings } = await res.json();
+			settingsSections = settings ?? {};
+		} catch {
+			loadError = 'Could not load platform data. Please try again.';
+		}
+	}
 
 	let currentSettings = $derived(settingsSections[activeSettingsTab] ?? []);
 
@@ -468,21 +324,88 @@
 		isEditSettingOpen = true;
 	}
 
-	function handleSaveSetting(e: Event) {
+	async function handleSaveSetting(e: Event) {
 		e.preventDefault();
 		if (editSettingIndex < 0 || !editSettingValue.trim()) return;
-		settingsSections[activeSettingsTab][editSettingIndex].value = editSettingValue.trim();
-		triggerToast(`"${editSettingName}" updated successfully!`);
-		isEditSettingOpen = false;
-		editSettingIndex = -1;
+
+		const setting = settingsSections[activeSettingsTab][editSettingIndex];
+		const newValue = editSettingValue.trim();
+
+		try {
+			const res = await fetch(
+				`${API_BASE_URL}/api/admin/platform/settings/${encodeURIComponent(setting.key)}`,
+				{
+					method: 'PUT',
+					headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+					body: JSON.stringify({ value: newValue })
+				}
+			);
+
+			if (res.status === 401) {
+				localStorage.removeItem('superadmin_token');
+				await goto('/super-admin-portal');
+				return;
+			}
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to update setting');
+				return;
+			}
+
+			settingsSections[activeSettingsTab][editSettingIndex].value = newValue;
+			triggerToast(`"${editSettingName}" updated successfully!`);
+			isEditSettingOpen = false;
+			editSettingIndex = -1;
+		} catch {
+			triggerToast('Failed to update setting');
+		}
 	}
 
-	function handleSaveAllSettings() {
-		triggerToast('All system settings saved successfully!');
+	async function handleSaveAllSettings() {
+		const tab = activeSettingsTab;
+		const payload = {
+			settings: (settingsSections[tab] ?? []).map((s) => ({
+				key: s.key,
+				value: s.value,
+				status: s.status
+			}))
+		};
+
+		if (payload.settings.length === 0) return;
+
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/settings`, {
+				method: 'PUT',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+
+			if (res.status === 401) {
+				localStorage.removeItem('superadmin_token');
+				await goto('/super-admin-portal');
+				return;
+			}
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to save settings');
+				return;
+			}
+
+			const { settings } = await res.json();
+			settingsSections = settings ?? settingsSections;
+			triggerToast('All system settings saved successfully!');
+		} catch {
+			triggerToast('Failed to save settings');
+		}
 	}
 
-	function handleResetSettings() {
-		triggerToast(`"${activeSettingsTab}" settings reset to default values.`);
+	// There is no defaults endpoint, so "reset" reloads the persisted values from
+	// the server, discarding any unsaved in-memory edits.
+	async function handleResetSettings() {
+		await loadSettings();
+		triggerToast(`"${activeSettingsTab}" settings reloaded from server.`);
 	}
 
 	function settingStatusClass(status: SettingStatus): string {
@@ -3050,7 +2973,7 @@
 					>
 						<div>
 							<span class="text-2xl font-bold font-serif text-slate-900"
-								>{settingsSections['Credit Policy'].length + 3}</span
+								>{(settingsSections['Credit Policy']?.length ?? 0) + 3}</span
 							>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Credit Policies</h3>
 							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
@@ -3284,7 +3207,7 @@
 							>
 								<span class="text-xs font-semibold text-slate-500">Credit Policies</span>
 								<span class="text-xs font-bold text-slate-900"
-									>{settingsSections['Credit Policy'].length + 3}</span
+									>{(settingsSections['Credit Policy']?.length ?? 0) + 3}</span
 								>
 							</div>
 							<div

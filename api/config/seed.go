@@ -56,8 +56,81 @@ func SeedDevData() {
 		return
 	}
 
+	if err := seedSystemSettings(); err != nil {
+		log.Printf("Seeding system settings failed: %v", err)
+		return
+	}
+
 	log.Printf("Demo data ready: %d students, %d activities. Every account's password is %q.",
 		len(students), len(activities), DevPassword)
+}
+
+// ---------------------------------------------------------------------------
+// System settings
+// ---------------------------------------------------------------------------
+
+// seedSystemSettings loads the default platform settings shown on the super
+// admin System Settings screen. Value and Status are seeded via Attrs so they
+// are only written on first create — a super admin's later edits are never
+// overwritten on re-seed. The structural fields (category, name, description,
+// order) are kept in sync via Assign so code changes propagate.
+func seedSystemSettings() error {
+	settings := []models.SystemSetting{
+		// Academic Year
+		{Key: "academic_year_current", Category: "Academic Year", Name: "Current Academic Year", Description: "Active academic cycle label displayed platform-wide", Value: "2025-2026", Status: "Active"},
+		{Key: "academic_year_start", Category: "Academic Year", Name: "Academic Year Start Date", Description: "Official start date of the current academic year", Value: "Aug 1, 2025", Status: "Active"},
+		{Key: "academic_year_end", Category: "Academic Year", Name: "Academic Year End Date", Description: "Official end date of the current academic year", Value: "May 31, 2026", Status: "Active"},
+		{Key: "enrollment_deadline", Category: "Academic Year", Name: "Enrollment Deadline", Description: "Last date for activity enrollment submissions", Value: "Sep 15, 2025", Status: "Active"},
+
+		// Credit Policy
+		{Key: "credit_min_required", Category: "Credit Policy", Name: "Minimum Credits Required", Description: "Total credits a student must earn to graduate", Value: "100", Status: "Active"},
+		{Key: "credit_max_per_activity", Category: "Credit Policy", Name: "Maximum Credits per Activity", Description: "Upper cap on credits from a single activity", Value: "20", Status: "Active"},
+		{Key: "credit_min_per_semester", Category: "Credit Policy", Name: "Minimum Credits per Semester", Description: "Credits a student must earn each semester", Value: "12", Status: "Active"},
+		{Key: "credit_rollover", Category: "Credit Policy", Name: "Credit Rollover", Description: "Carry unused credits to the next academic year", Value: "Enabled", Status: "Enabled"},
+		{Key: "credit_grace_buffer", Category: "Credit Policy", Name: "Grace Credit Buffer", Description: "Extra credits allowed beyond the target", Value: "5", Status: "Active"},
+
+		// Activity Rules
+		{Key: "activity_max_enrollments", Category: "Activity Rules", Name: "Max Active Enrollments", Description: "Activities a student can be enrolled in at once", Value: "5", Status: "Active"},
+		{Key: "activity_mentor_approval", Category: "Activity Rules", Name: "Mentor Approval Required", Description: "Require mentor sign-off before credit is granted", Value: "Enabled", Status: "Enabled"},
+		{Key: "activity_auto_verify_threshold", Category: "Activity Rules", Name: "Auto-Verification Threshold", Description: "Score above which certificates auto-verify", Value: "90%", Status: "Active"},
+		{Key: "activity_self_reported", Category: "Activity Rules", Name: "Self-Reported Activities", Description: "Allow students to log their own activities", Value: "Disabled", Status: "Disabled"},
+		{Key: "activity_resubmission_window", Category: "Activity Rules", Name: "Resubmission Window", Description: "Days allowed to resubmit a rejected certificate", Value: "7 days", Status: "Active"},
+
+		// Notifications
+		{Key: "notify_email", Category: "Notifications", Name: "Email Notifications", Description: "Send system emails for key events", Value: "Enabled", Status: "Enabled"},
+		{Key: "notify_otp_expiry", Category: "Notifications", Name: "OTP Expiry Duration", Description: "Validity window for verification codes", Value: "15 min", Status: "Active"},
+		{Key: "notify_reminder_frequency", Category: "Notifications", Name: "Reminder Frequency", Description: "How often pending-task reminders are sent", Value: "Weekly", Status: "Active"},
+		{Key: "notify_announcement_broadcast", Category: "Notifications", Name: "Announcement Broadcasts", Description: "Push platform-wide announcements to all users", Value: "Enabled", Status: "Enabled"},
+
+		// Platform
+		{Key: "platform_name", Category: "Platform", Name: "Platform Name", Description: "Display name shown across the portal", Value: "iSPARC", Status: "Active"},
+		{Key: "platform_maintenance_mode", Category: "Platform", Name: "Maintenance Mode", Description: "Temporarily disable access for non-admins", Value: "Disabled", Status: "Disabled"},
+		{Key: "platform_time_zone", Category: "Platform", Name: "Default Time Zone", Description: "Base time zone for schedules and logs", Value: "IST (UTC+5:30)", Status: "Active"},
+		{Key: "platform_language", Category: "Platform", Name: "Default Language", Description: "Default interface language for new users", Value: "English", Status: "Active"},
+
+		// Security
+		{Key: "security_min_password_length", Category: "Security", Name: "Minimum Password Length", Description: "Required characters for user passwords", Value: "8", Status: "Active"},
+		{Key: "security_session_timeout", Category: "Security", Name: "Session Timeout", Description: "Idle minutes before automatic logout", Value: "30 min", Status: "Active"},
+		{Key: "security_two_factor", Category: "Security", Name: "Two-Factor Authentication", Description: "Require 2FA for admin accounts", Value: "Enabled", Status: "Enabled"},
+		{Key: "security_max_login_attempts", Category: "Security", Name: "Max Login Attempts", Description: "Failed logins before temporary lockout", Value: "5", Status: "Active"},
+	}
+
+	for i, setting := range settings {
+		var existing models.SystemSetting
+		if err := DB.Where(models.SystemSetting{Key: setting.Key}).
+			Attrs(models.SystemSetting{Value: setting.Value, Status: setting.Status}).
+			Assign(models.SystemSetting{
+				Category:    setting.Category,
+				Name:        setting.Name,
+				Description: setting.Description,
+				SortOrder:   i,
+			}).
+			FirstOrCreate(&existing).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ---------------------------------------------------------------------------

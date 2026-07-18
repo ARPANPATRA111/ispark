@@ -67,4 +67,9 @@ func SetupRoutes(app *fiber.App) {
 	platform.Post("/users", controllers.CreatePlatformUser)
 	platform.Delete("/users/:id", controllers.DeletePlatformUser)
 
+	// System settings
+	platform.Get("/settings", controllers.GetPlatformSettings)
+	platform.Put("/settings", controllers.UpdatePlatformSettings)
+	platform.Put("/settings/:key", controllers.UpdatePlatformSetting)
+
 }
