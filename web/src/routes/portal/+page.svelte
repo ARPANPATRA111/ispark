@@ -639,7 +639,7 @@
 					</button>
 					<div class="min-w-0 flex-1">
 						<h1
-							class="text-base sm:text-xl lg:text-xl font-bold text-slate-900 font-serif leading-tight whitespace-nowrap"
+							class="text-base sm:text-xl lg:text-xl font-bold text-slate-900 font-serif leading-tight break-words"
 						>
 							{currentTab === 'Profile'
 								? 'My Profile'
@@ -658,6 +658,7 @@
 						</p>
 					</div>
 				</div>
+
 
 				<!-- Action items -->
 				<div class="flex items-center gap-3.5 relative shrink-0">
