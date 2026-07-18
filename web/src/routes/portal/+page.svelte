@@ -659,7 +659,6 @@
 					</div>
 				</div>
 
-
 				<!-- Action items -->
 				<div class="flex items-center gap-3.5 relative shrink-0">
 					<!-- Notification button -->
