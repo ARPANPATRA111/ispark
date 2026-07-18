@@ -5,6 +5,7 @@
 	import { API_BASE_URL } from '$lib/config';
 	import ActivityManagementView from '../ActivityManagementView.svelte';
 	import TrackManagementView from '../TrackManagementView.svelte';
+	import AnnouncementManagementView from '../AnnouncementManagementView.svelte';
 
 	// ── Platform data (loaded from the API) ────────────────────────────────────
 	interface PlatformUser {
@@ -1698,6 +1699,8 @@
 				<ActivityManagementView />
 			{:else if currentTab === 'Track Management'}
 				<TrackManagementView />
+			{:else if currentTab === 'Announcement Management'}
+				<AnnouncementManagementView />
 			{:else if currentTab === 'User Management'}
 				<!-- User Statistics Cards Grid (Step 2) -->
 				<section
