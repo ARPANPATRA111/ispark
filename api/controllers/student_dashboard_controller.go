@@ -392,6 +392,8 @@ func GetActivities(c *fiber.Ctx) error {
 		})
 	}
 
+	resolveActivitiesCoordinators(activities)
+
 	return c.JSON(activities)
 }
 
@@ -568,6 +570,22 @@ func GetEnrollments(c *fiber.Ctx) error {
 		})
 	}
 
+	// Resolve coordinator names dynamically for preloaded activities
+	var admins []models.Admin
+	if err := config.DB.Find(&admins).Error; err == nil {
+		adminMap := make(map[string]string)
+		for _, admin := range admins {
+			adminMap[admin.AdminID] = admin.Name
+		}
+		for i := range enrollments {
+			if enrollments[i].Activity.CoordinatorID != "" {
+				if name, ok := adminMap[enrollments[i].Activity.CoordinatorID]; ok {
+					enrollments[i].Activity.Coordinator = name
+				}
+			}
+		}
+	}
+
 	return c.JSON(enrollments)
 }
 
@@ -668,6 +686,28 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		"total_students":          totalStudents,
 		"recent_activities":       recentActivities,
 	})
+}
+
+func resolveActivitiesCoordinators(activities []models.Activity) {
+	if len(activities) == 0 {
+		return
+	}
+	var admins []models.Admin
+	if err := config.DB.Find(&admins).Error; err != nil {
+		return
+	}
+	adminMap := make(map[string]string)
+	for _, admin := range admins {
+		adminMap[admin.AdminID] = admin.Name
+	}
+
+	for i := range activities {
+		if activities[i].CoordinatorID != "" {
+			if name, ok := adminMap[activities[i].CoordinatorID]; ok {
+				activities[i].Coordinator = name
+			}
+		}
+	}
 }
 
 // StudentInfoResponse represents student details for the marksheet
