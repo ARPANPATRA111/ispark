@@ -40,7 +40,16 @@ func SeedDevData() {
 		return
 	}
 
-	activities, err := seedActivities()
+	// Tracks are seeded before activities so each activity can be linked to its
+	// track via Activity.TrackID (the normalized relationship the Track
+	// Management activity counts are derived from).
+	trackIDs, err := seedTracks()
+	if err != nil {
+		log.Printf("Seeding tracks failed: %v", err)
+		return
+	}
+
+	activities, err := seedActivities(trackIDs)
 	if err != nil {
 		log.Printf("Seeding activities failed: %v", err)
 		return
@@ -63,6 +72,43 @@ func SeedDevData() {
 
 	log.Printf("Demo data ready: %d students, %d activities. Every account's password is %q.",
 		len(students), len(activities), DevPassword)
+}
+
+// ---------------------------------------------------------------------------
+// Tracks
+// ---------------------------------------------------------------------------
+
+// seedTracks loads the default activity tracks shown on the super admin Track
+// Management screen. Description and status are seeded via Attrs so they are
+// only written on first create — a super admin's later edits survive a re-seed.
+// It returns a track name -> ID map so seedActivities can link each activity to
+// its track.
+func seedTracks() (map[string]uint, error) {
+	tracks := []models.Track{
+		{
+			Name:        "Personality Development",
+			Description: "Activities focused on personal growth, communication, and leadership skills.",
+			Status:      "Active",
+		},
+		{
+			Name:        "Skill Building",
+			Description: "Technical and vocational activities that develop practical competencies.",
+			Status:      "Active",
+		},
+	}
+
+	ids := make(map[string]uint, len(tracks))
+	for _, track := range tracks {
+		var existing models.Track
+		if err := DB.Where(models.Track{Name: track.Name}).
+			Attrs(models.Track{Description: track.Description, Status: track.Status}).
+			FirstOrCreate(&existing).Error; err != nil {
+			return nil, err
+		}
+		ids[existing.Name] = existing.ID
+	}
+
+	return ids, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -229,9 +275,23 @@ func seedStudents(hashedPassword string) ([]models.Student, error) {
 // ---------------------------------------------------------------------------
 
 // Categories are upper case because that is what the activity catalogue in the
-// student portal groups and filters on.
-func seedActivities() ([]models.Activity, error) {
+// student portal groups and filters on. trackIDs maps a track name to its ID so
+// each seeded activity can be linked to a track via Activity.TrackID.
+func seedActivities(trackIDs map[string]uint) ([]models.Activity, error) {
 	now := time.Now()
+
+	// activityTracks assigns each seeded activity to a default track by name, so
+	// the Track Management activity counts are populated from real data rather
+	// than sitting at zero.
+	activityTracks := map[string]string{
+		"National Hackathon 2026":           "Skill Building",
+		"National Science Olympiad":         "Skill Building",
+		"Inter-College Athletics Meet":      "Personality Development",
+		"Cultural Fest - Rangmanch":         "Personality Development",
+		"Student Leadership Workshop":       "Personality Development",
+		"Inter College Debate Championship": "Personality Development",
+		"Blood Donation Camp":               "Personality Development",
+	}
 
 	activities := []models.Activity{
 		{
@@ -281,10 +341,20 @@ func seedActivities() ([]models.Activity, error) {
 	seeded := make([]models.Activity, 0, len(activities))
 
 	for _, activity := range activities {
+		// Link the activity to its track. A local copy is taken so &trackID
+		// points at this iteration's value, not a shared loop variable.
+		var trackID *uint
+		if trackName, ok := activityTracks[activity.Name]; ok {
+			if id, ok := trackIDs[trackName]; ok {
+				trackID = &id
+			}
+		}
+
 		var existing models.Activity
 		if err := DB.Where(models.Activity{Name: activity.Name}).
 			Assign(models.Activity{
 				Category:      activity.Category,
+				TrackID:       trackID,
 				Description:   activity.Description,
 				Credits:       activity.Credits,
 				Mode:          activity.Mode,

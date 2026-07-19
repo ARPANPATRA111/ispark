@@ -74,4 +74,12 @@ func SetupRoutes(app *fiber.App) {
 	platform.Put("/settings", controllers.UpdatePlatformSettings)
 	platform.Put("/settings/:key", controllers.UpdatePlatformSetting)
 
+	// Track management
+	platform.Get("/tracks/stats", controllers.GetTrackStats)
+	platform.Get("/tracks", controllers.GetTracks)
+	platform.Post("/tracks", controllers.CreateTrack)
+	platform.Get("/tracks/:id", controllers.GetTrack)
+	platform.Put("/tracks/:id", controllers.UpdateTrack)
+	platform.Delete("/tracks/:id", controllers.DeleteTrack)
+
 }
