@@ -23,10 +23,12 @@ type Track struct {
 	TotalActivities int64 `gorm:"-" json:"total_activities"`
 }
 
-// TrackInput is the body accepted when creating or updating a track. Status is a
-// pointer so an update can toggle it independently of the other fields.
+// TrackInput is the body accepted when creating or updating a track. Description
+// and Status are pointers so an update can change one field without clobbering
+// the others: a nil pointer means "field omitted, leave it untouched", while a
+// non-nil pointer (including an empty description) is an explicit new value.
 type TrackInput struct {
 	Name        string  `json:"name"`
-	Description string  `json:"description"`
+	Description *string `json:"description"`
 	Status      *string `json:"status"`
 }

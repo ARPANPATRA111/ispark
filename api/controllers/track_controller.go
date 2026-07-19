@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/iips-oss/ispark/api/config"
@@ -15,6 +16,11 @@ var allowedTrackStatuses = map[string]bool{
 	"Active":   true,
 	"Inactive": true,
 }
+
+// maxTrackNameLength mirrors the varchar(100) limit on Track.Name so an
+// over-long name is rejected with a 400 instead of surfacing as a database
+// error (500) once it hits the column constraint.
+const maxTrackNameLength = 100
 
 // trackActivityCounts returns the number of activities assigned to each track,
 // keyed by track ID. Tracks with no activities are simply absent from the map.
@@ -123,6 +129,14 @@ func CreateTrack(c *fiber.Ctx) error {
 	if name == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Track name is required"})
 	}
+	if utf8.RuneCountInString(name) > maxTrackNameLength {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Track name must be 100 characters or fewer"})
+	}
+
+	description := ""
+	if input.Description != nil {
+		description = strings.TrimSpace(*input.Description)
+	}
 
 	status := "Active"
 	if input.Status != nil {
@@ -142,7 +156,7 @@ func CreateTrack(c *fiber.Ctx) error {
 
 	track := models.Track{
 		Name:        name,
-		Description: strings.TrimSpace(input.Description),
+		Description: description,
 		Status:      status,
 	}
 	if err := config.DB.Create(&track).Error; err != nil {
@@ -168,15 +182,20 @@ func UpdateTrack(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
 	}
 
-	if name := strings.TrimSpace(input.Name); name != "" && name != track.Name {
-		taken, err := trackNameTaken(name, track.ID)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update track"})
+	if name := strings.TrimSpace(input.Name); name != "" {
+		if utf8.RuneCountInString(name) > maxTrackNameLength {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Track name must be 100 characters or fewer"})
 		}
-		if taken {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A track with this name already exists"})
+		if name != track.Name {
+			taken, err := trackNameTaken(name, track.ID)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update track"})
+			}
+			if taken {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A track with this name already exists"})
+			}
+			track.Name = name
 		}
-		track.Name = name
 	}
 
 	if input.Status != nil {
@@ -186,8 +205,12 @@ func UpdateTrack(c *fiber.Ctx) error {
 		track.Status = *input.Status
 	}
 
-	// Description is always overwritten with the submitted value (may be cleared).
-	track.Description = strings.TrimSpace(input.Description)
+	// Only touch the description when the caller actually sent the field. A nil
+	// pointer means it was omitted (e.g. a status-only update), so the existing
+	// description is preserved; a non-nil pointer may explicitly clear it.
+	if input.Description != nil {
+		track.Description = strings.TrimSpace(*input.Description)
+	}
 
 	if err := config.DB.Save(&track).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update track"})

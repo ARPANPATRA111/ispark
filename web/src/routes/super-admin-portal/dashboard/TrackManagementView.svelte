@@ -276,7 +276,6 @@
 			</div>
 			<div class="mt-4">
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Tracks</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+0 this semester</span>
 			</div>
 		</div>
 
@@ -306,7 +305,6 @@
 			</div>
 			<div class="mt-4">
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Tracks</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">2 new this year</span>
 			</div>
 		</div>
 
@@ -338,7 +336,6 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Personality Development
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+6 this month</span>
 			</div>
 		</div>
 
@@ -370,7 +367,6 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Skill Building
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+4 this month</span>
 			</div>
 		</div>
 	</section>
