@@ -297,13 +297,13 @@ func seedActivities(trackIDs map[string]uint) ([]models.Activity, error) {
 		{
 			Name: "National Hackathon 2026", Category: "TECHNICAL",
 			Description: "A 36-hour coding challenge open to all students. Build solutions for real-world problems.",
-			Credits:     15, Mode: "Offline", Venue: "IIPS Auditorium", Coordinator: "Dr. Rajesh Kumar",
+			Credits:     15, Mode: "Offline", Venue: "IIPS Auditorium", Coordinator: "Dr. Rajesh Kumar", CoordinatorID: "admin",
 			RegDeadline: now.AddDate(0, 0, 3), ActivityDate: now.AddDate(0, 0, 10), Status: "Closing Soon",
 		},
 		{
 			Name: "National Science Olympiad", Category: "RESEARCH",
 			Description: "National-level science competition covering physics, chemistry and biology.",
-			Credits:     20, Mode: "Hybrid", Venue: "IIPS Seminar Hall", Coordinator: "Dr. Priya Patel",
+			Credits:     20, Mode: "Hybrid", Venue: "IIPS Seminar Hall", Coordinator: "Dr. Priya Patel", CoordinatorID: "admin2",
 			RegDeadline: now.AddDate(0, 0, 14), ActivityDate: now.AddDate(0, 0, 21), Status: "Open",
 		},
 		{
@@ -327,7 +327,7 @@ func seedActivities(trackIDs map[string]uint) ([]models.Activity, error) {
 		{
 			Name: "Inter College Debate Championship", Category: "PUBLIC SPEAKING",
 			Description: "Parliamentary-style debate on contemporary socio-political topics.",
-			Credits:     12, Mode: "Offline", Venue: "IIPS Conference Hall", Coordinator: "Dr. Rajesh Kumar",
+			Credits:     12, Mode: "Offline", Venue: "IIPS Conference Hall", Coordinator: "Dr. Rajesh Kumar", CoordinatorID: "admin",
 			RegDeadline: now.AddDate(0, 0, 4), ActivityDate: now.AddDate(0, 0, 9), Status: "Closing Soon",
 		},
 		{
@@ -353,16 +353,17 @@ func seedActivities(trackIDs map[string]uint) ([]models.Activity, error) {
 		var existing models.Activity
 		if err := DB.Where(models.Activity{Name: activity.Name}).
 			Assign(models.Activity{
-				Category:     activity.Category,
-				TrackID:      trackID,
-				Description:  activity.Description,
-				Credits:      activity.Credits,
-				Mode:         activity.Mode,
-				Venue:        activity.Venue,
-				Coordinator:  activity.Coordinator,
-				RegDeadline:  activity.RegDeadline,
-				ActivityDate: activity.ActivityDate,
-				Status:       activity.Status,
+				Category:      activity.Category,
+				TrackID:       trackID,
+				Description:   activity.Description,
+				Credits:       activity.Credits,
+				Mode:          activity.Mode,
+				Venue:         activity.Venue,
+				Coordinator:   activity.Coordinator,
+				CoordinatorID: activity.CoordinatorID,
+				RegDeadline:   activity.RegDeadline,
+				ActivityDate:  activity.ActivityDate,
+				Status:        activity.Status,
 			}).
 			FirstOrCreate(&existing).Error; err != nil {
 			return nil, err
