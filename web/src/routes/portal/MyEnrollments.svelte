@@ -38,7 +38,7 @@
 	}
 
 	interface RecentUpdate {
-		type: 'success' | 'star' | 'doc' | 'db';
+		type: 'success' | 'star' | 'doc' | 'db' | 'info';
 		text: string;
 		time: string;
 	}
@@ -177,7 +177,6 @@
 		Math.min(Math.round((totalCreditsEarned / 200) * 100), 100)
 	);
 
-	// Recent updates timeline data derived from actual registered activities, or falling back to stats
 	const recentUpdates: RecentUpdate[] = $derived.by(() => {
 		if (registeredActivities.length > 0) {
 			return registeredActivities.slice(0, 3).map((act) => {
@@ -789,24 +788,31 @@
 						</h2>
 
 						<!-- Category progress list -->
-						<div class="space-y-4 my-5">
-							{#each creditCategorySummaries as cat}
-								<div class="space-y-1.5">
-									<div class="flex justify-between text-xs font-bold text-slate-800">
-										<span class="text-[10px] font-extrabold text-slate-405 uppercase tracking-wide"
-											>{cat.category}</span
-										>
-										<span class="text-slate-900">{cat.creditsEarned} Credits</span>
+						{#if creditCategorySummaries.length > 0}
+							<div class="space-y-4 my-5">
+								{#each creditCategorySummaries as cat}
+									<div class="space-y-1.5">
+										<div class="flex justify-between text-xs font-bold text-slate-800">
+											<span
+												class="text-[10px] font-extrabold text-slate-405 uppercase tracking-wide"
+												>{cat.category}</span
+											>
+											<span class="text-slate-900">{cat.creditsEarned} Credits</span>
+										</div>
+										<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+											<div
+												class="h-full bg-[#0B1535] rounded-full"
+												style="width: {cat.percentage}%"
+											></div>
+										</div>
 									</div>
-									<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-										<div
-											class="h-full bg-[#0B1535] rounded-full"
-											style="width: {cat.percentage}%"
-										></div>
-									</div>
-								</div>
-							{/each}
-						</div>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-[11px] text-slate-400 font-semibold my-5">
+								No category-wise credit data available yet.
+							</p>
+						{/if}
 					</div>
 
 					<div class="border-t border-slate-150 pt-5 mt-2">
@@ -844,12 +850,15 @@
 						{#each recentUpdates as update}
 							<div class="flex items-start gap-3">
 								<!-- Circle status indicator icon -->
+								<!-- Color language matches the status pills used above: emerald = Completed/Verified,
+								     amber = Pending Verification, rose = Rejected, blue = Registered -->
 								<div
 									class="w-8 h-8 rounded-full border flex items-center justify-center shrink-0
 								{update.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : ''}
-								{update.type === 'star' ? 'bg-blue-50 border-blue-100 text-blue-600' : ''}
-								{update.type === 'doc' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : ''}
-								{update.type === 'db' ? 'bg-blue-50 border-blue-100 text-blue-600' : ''}"
+								{update.type === 'star' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : ''}
+								{update.type === 'doc' ? 'bg-amber-50 border-amber-100 text-amber-600' : ''}
+								{update.type === 'db' ? 'bg-rose-50 border-rose-100 text-rose-600' : ''}
+								{update.type === 'info' ? 'bg-blue-50 border-blue-100 text-blue-600' : ''}"
 								>
 									{#if update.type === 'success'}
 										<svg
@@ -896,6 +905,21 @@
 												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 											/>
 										</svg>
+									{:else if update.type === 'db'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2.2"
+											stroke="currentColor"
+											class="w-4 h-4"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
 									{:else}
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
@@ -908,7 +932,7 @@
 											<path
 												stroke-linecap="round"
 												stroke-linejoin="round"
-												d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75"
+												d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 											/>
 										</svg>
 									{/if}

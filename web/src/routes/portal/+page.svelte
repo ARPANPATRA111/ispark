@@ -459,7 +459,7 @@
 				{#each menuItems as item}
 					<button
 						onclick={() => (currentTab = item.name)}
-						class="w-full flex items-start gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
+						class="w-full flex items-center gap-2 px-1 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 						item.name
 							? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
 							: 'text-slate-505 hover:bg-slate-50 hover:text-slate-900'}"
@@ -474,7 +474,9 @@
 						>
 							<path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
 						</svg>
-						<span class="text-left">{item.name}</span>
+						<span class="flex-1 min-w-0 whitespace-nowrap text-left">
+							{item.name}
+						</span>
 					</button>
 				{/each}
 			</nav>
@@ -561,7 +563,7 @@
 								currentTab = item.name;
 								toggleMobileSidebar();
 							}}
-							class="w-full flex items-start gap-3.5 px-4 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
+							class="w-full flex items-center gap-2 px-1 py-3 rounded-lg text-[13px] font-bold tracking-wide transition-all duration-200 {currentTab ===
 							item.name
 								? 'bg-[#881B1B]/10 text-[#881B1B] border-l-[3px] border-[#881B1B] rounded-l-none'
 								: 'text-slate-505 hover:bg-slate-50 hover:text-slate-900'}"
@@ -572,11 +574,13 @@
 								viewBox="0 0 24 24"
 								stroke="currentColor"
 								stroke-width="2"
-								class="w-5 h-5 shrink-0 mt-0.5"
+								class="w-5 h-5 shrink-0"
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
 							</svg>
-							<span class="text-left">{item.name}</span>
+							<span class="flex-1 min-w-0 whitespace-nowrap text-left">
+								{item.name}
+							</span>
 						</button>
 					{/each}
 				</nav>
@@ -613,14 +617,14 @@
 		<div class="flex-grow flex flex-col min-w-0">
 			<!-- Top Navigation Header -->
 			<header
-				class="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30"
+				class="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 sticky top-0 z-30"
 			>
 				<!-- Mobile sidebar toggle -->
-				<div class="flex items-center gap-3">
+				<div class="flex items-center gap-3 min-w-0 flex-1">
 					<button
 						onclick={toggleMobileSidebar}
 						aria-label="Open sidebar"
-						class="lg:hidden p-2 rounded-lg text-slate-655 hover:bg-slate-100 hover:text-slate-900 focus:outline-none"
+						class="lg:hidden p-2 rounded-lg text-slate-655 hover:bg-slate-100 hover:text-slate-900 focus:outline-none shrink-0"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -633,8 +637,10 @@
 							<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
 						</svg>
 					</button>
-					<div>
-						<h1 class="text-lg sm:text-xl font-bold text-slate-900 font-serif leading-tight">
+					<div class="min-w-0 flex-1">
+						<h1
+							class="text-base sm:text-xl lg:text-xl font-bold text-slate-900 font-serif leading-tight break-words"
+						>
 							{currentTab === 'Profile'
 								? 'My Profile'
 								: currentTab === 'Dashboard'
@@ -646,7 +652,7 @@
 											: currentTab}
 						</h1>
 						<p
-							class="text-[10px] sm:text-xs font-semibold text-slate-405 uppercase tracking-wider mt-0.5"
+							class="text-[10px] sm:text-xs font-semibold text-slate-405 uppercase tracking-wider mt-0.5 truncate"
 						>
 							{currentDateString}
 						</p>
@@ -654,14 +660,14 @@
 				</div>
 
 				<!-- Action items -->
-				<div class="flex items-center gap-3.5 relative">
+				<div class="flex items-center gap-3.5 relative shrink-0">
 					<!-- Notification button -->
 					<button
 						onclick={() => {
 							isNotificationsOpen = !isNotificationsOpen;
 							isSearchOpen = false;
 						}}
-						class="w-10 h-10 border border-slate-250 bg-white rounded-lg flex items-center justify-center text-slate-655 hover:bg-slate-50 transition-colors relative"
+						class="w-10 h-10 border border-slate-250 bg-white rounded-lg flex items-center justify-center text-slate-655 hover:bg-slate-50 transition-colors relative shrink-0"
 					>
 						<span class="sr-only">Notifications</span>
 						<svg
@@ -716,7 +722,7 @@
 							isSearchOpen = !isSearchOpen;
 							isNotificationsOpen = false;
 						}}
-						class="w-10 h-10 border border-slate-250 bg-white rounded-lg flex items-center justify-center text-slate-655 hover:bg-slate-50 transition-colors"
+						class="w-10 h-10 border border-slate-250 bg-white rounded-lg flex items-center justify-center text-slate-655 hover:bg-slate-50 transition-colors shrink-0"
 					>
 						<span class="sr-only">Toggle search</span>
 						<svg
@@ -802,20 +808,22 @@
 					>
 						<!-- Card 1: Activities Participated -->
 						<div
-							class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
+							class="w-full min-h-[90px] bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
 						>
 							<div class="flex items-center justify-between">
 								<span class="text-2xl font-bold font-serif text-slate-900"
 									>{stats.activities_participated}</span
 								>
-								<div class="p-2.5 rounded-lg bg-red-50 text-[#881B1B] border border-red-100">
+								<div
+									class="w-12 h-12 shrink-0 rounded-lg bg-red-50 text-[#881B1B] border border-red-100 flex items-center justify-center"
+								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										fill="none"
 										viewBox="0 0 24 24"
 										stroke="currentColor"
 										stroke-width="2"
-										class="w-5 h-5"
+										class="w-6 h-6"
 									>
 										<path
 											stroke-linecap="round"
@@ -837,20 +845,22 @@
 
 						<!-- Card 2: Certificates Uploaded -->
 						<div
-							class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
+							class="w-full min-h-[90px] bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
 						>
 							<div class="flex items-center justify-between">
 								<span class="text-2xl font-bold font-serif text-slate-900"
 									>{stats.certificates_uploaded}</span
 								>
-								<div class="p-2.5 rounded-lg bg-amber-50 text-[#C89B3C] border border-amber-100">
+								<div
+									class="w-12 h-12 shrink-0 rounded-lg bg-amber-50 text-[#C89B3C] border border-amber-100 flex items-center justify-center"
+								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										fill="none"
 										viewBox="0 0 24 24"
 										stroke="currentColor"
 										stroke-width="2"
-										class="w-5 h-5"
+										class="w-6 h-6"
 									>
 										<path
 											stroke-linecap="round"
@@ -872,14 +882,14 @@
 
 						<!-- Card 3: Credits Earned -->
 						<div
-							class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
+							class="w-full min-h-[90px] bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
 						>
 							<div class="flex items-center justify-between">
 								<span class="text-2xl font-bold font-serif text-slate-900"
 									>{stats.credits_earned}</span
 								>
 								<div
-									class="p-2.5 rounded-lg bg-emerald-50 text-emerald-655 border border-emerald-100"
+									class="w-12 h-12 shrink-0 rounded-lg bg-emerald-50 text-emerald-655 border border-emerald-100 flex items-center justify-center"
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
@@ -887,12 +897,13 @@
 										viewBox="0 0 24 24"
 										stroke="currentColor"
 										stroke-width="2"
-										class="w-5 h-5"
+										class="w-6 h-6"
 									>
+										<circle cx="12" cy="8" r="6" stroke-linecap="round" stroke-linejoin="round" />
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z"
+											d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"
 										/>
 									</svg>
 								</div>
@@ -909,25 +920,48 @@
 
 						<!-- Card 4: Current Rank -->
 						<div
-							class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
+							class="w-full min-h-[90px] bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs"
 						>
 							<div class="flex items-center justify-between">
 								<span class="text-2xl font-bold font-serif text-slate-900"
 									>#{stats.current_rank}</span
 								>
-								<div class="p-2.5 rounded-lg bg-amber-50 text-amber-500 border border-amber-100">
+								<div
+									class="w-12 h-12 shrink-0 rounded-lg bg-amber-50 text-amber-500 border border-amber-100 flex items-center justify-center"
+								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										fill="none"
 										viewBox="0 0 24 24"
 										stroke="currentColor"
 										stroke-width="2"
-										class="w-5 h-5"
+										class="w-6 h-6"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5a2 2 0 10-2 2h2zm0 0h4a2 2 0 012 2v2a2 2 0 01-2 2h-4v-6zm0 0H8a2 2 0 00-2 2v2a2 2 0 002 2h4v-6z"
+											d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"
+										/>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"
+										/>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M4 22h16" />
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"
+										/>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"
+										/>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M18 2H6v7a6 6 0 0 0 12 0V2Z"
 										/>
 									</svg>
 								</div>

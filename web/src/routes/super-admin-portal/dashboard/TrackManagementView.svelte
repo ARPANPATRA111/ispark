@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { API_BASE_URL } from '$lib/config';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type TrackStatus = 'Active' | 'Inactive';
@@ -12,23 +15,56 @@
 		status: TrackStatus;
 	}
 
-	// ── Track Registry (mock data matching Personality Development / Skill Building) ──
-	let tracks = $state<Track[]>([
-		{
-			id: 1,
-			name: 'Personality Development',
-			description: 'Activities focused on personal growth, communication, and leadership skills.',
-			totalActivities: 48,
-			status: 'Active'
-		},
-		{
-			id: 2,
-			name: 'Skill Building',
-			description: 'Technical and vocational activities that develop practical competencies.',
-			totalActivities: 36,
-			status: 'Active'
+	// ── Track Registry (loaded from the API) ─────────────────────────────────
+	let tracks = $state<Track[]>([]);
+
+	const tracksBase = `${API_BASE_URL}/api/admin/platform/tracks`;
+
+	function authHeaders(): Record<string, string> {
+		return { Authorization: `Bearer ${localStorage.getItem('superadmin_token')}` };
+	}
+
+	// unauthorized bounces the user back to sign-in on a 401 and reports whether
+	// the caller should stop.
+	async function unauthorized(res: Response): Promise<boolean> {
+		if (res.status === 401) {
+			localStorage.removeItem('superadmin_token');
+			await goto('/super-admin-portal');
+			return true;
 		}
-	]);
+		return false;
+	}
+
+	async function loadTracks() {
+		try {
+			const res = await fetch(tracksBase, { headers: authHeaders() });
+			if (await unauthorized(res)) return;
+			if (!res.ok) {
+				triggerToast('Could not load tracks. Please try again.');
+				return;
+			}
+			const { tracks: loaded } = await res.json();
+			tracks = (loaded ?? []).map(
+				(t: {
+					id: number;
+					name: string;
+					description: string;
+					status: TrackStatus;
+					total_activities: number;
+				}) => ({
+					id: t.id,
+					name: t.name,
+					description: t.description,
+					totalActivities: t.total_activities,
+					status: t.status
+				})
+			);
+		} catch {
+			triggerToast('Could not load tracks. Please try again.');
+		}
+	}
+
+	onMount(loadTracks);
 
 	let trackFilter = $state('All');
 	let trackSearch = $state('');
@@ -57,27 +93,35 @@
 	let isAddTrackModalOpen = $state(false);
 	let newTrackName = $state('');
 	let newTrackDescription = $state('');
-	let newTrackActivities = $state(0);
 
-	function handleAddTrack(e: Event) {
+	async function handleAddTrack(e: Event) {
 		e.preventDefault();
-		if (!newTrackName.trim()) return;
-		const newId = tracks.length ? Math.max(...tracks.map((t) => t.id)) + 1 : 1;
-		tracks = [
-			...tracks,
-			{
-				id: newId,
-				name: newTrackName.trim(),
-				description: newTrackDescription.trim() || 'No description provided.',
-				totalActivities: newTrackActivities || 0,
-				status: 'Active'
+		const name = newTrackName.trim();
+		if (!name) return;
+
+		try {
+			const res = await fetch(tracksBase, {
+				method: 'POST',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name, description: newTrackDescription.trim() })
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to create track');
+				return;
 			}
-		];
-		triggerToast(`Track "${newTrackName.trim()}" created successfully!`);
-		newTrackName = '';
-		newTrackDescription = '';
-		newTrackActivities = 0;
-		isAddTrackModalOpen = false;
+
+			triggerToast(`Track "${name}" created successfully!`);
+			newTrackName = '';
+			newTrackDescription = '';
+			isAddTrackModalOpen = false;
+			await loadTracks();
+		} catch {
+			triggerToast('Failed to create track');
+		}
 	}
 
 	// ── Edit Track modal ─────────────────────────────────────────────────────
@@ -85,35 +129,47 @@
 	let editTrackId = $state(-1);
 	let editTrackName = $state('');
 	let editTrackDescription = $state('');
-	let editTrackActivities = $state(0);
 	let editTrackStatus = $state<TrackStatus>('Active');
 
 	function openEditTrack(track: Track) {
 		editTrackId = track.id;
 		editTrackName = track.name;
 		editTrackDescription = track.description;
-		editTrackActivities = track.totalActivities;
 		editTrackStatus = track.status;
 		isEditTrackModalOpen = true;
 	}
 
-	function handleSaveTrack(e: Event) {
+	async function handleSaveTrack(e: Event) {
 		e.preventDefault();
-		if (editTrackId < 0 || !editTrackName.trim()) return;
-		tracks = tracks.map((t) =>
-			t.id === editTrackId
-				? {
-						...t,
-						name: editTrackName.trim(),
-						description: editTrackDescription.trim(),
-						totalActivities: editTrackActivities,
-						status: editTrackStatus
-					}
-				: t
-		);
-		triggerToast(`Track "${editTrackName.trim()}" updated successfully!`);
-		isEditTrackModalOpen = false;
-		editTrackId = -1;
+		const name = editTrackName.trim();
+		if (editTrackId < 0 || !name) return;
+
+		try {
+			const res = await fetch(`${tracksBase}/${editTrackId}`, {
+				method: 'PUT',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name,
+					description: editTrackDescription.trim(),
+					status: editTrackStatus
+				})
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to update track');
+				return;
+			}
+
+			triggerToast(`Track "${name}" updated successfully!`);
+			isEditTrackModalOpen = false;
+			editTrackId = -1;
+			await loadTracks();
+		} catch {
+			triggerToast('Failed to update track');
+		}
 	}
 
 	// ── View Track modal ─────────────────────────────────────────────────────
@@ -141,10 +197,28 @@
 		}, 3000);
 	}
 
-	function handleDeleteTrack(track: Track) {
-		if (confirm(`Are you sure you want to delete the "${track.name}" track?`)) {
-			tracks = tracks.filter((t) => t.id !== track.id);
+	async function handleDeleteTrack(track: Track) {
+		if (!confirm(`Are you sure you want to delete the "${track.name}" track?`)) return;
+
+		try {
+			const res = await fetch(`${tracksBase}/${track.id}`, {
+				method: 'DELETE',
+				headers: authHeaders()
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				// A 409 here means the track still has activities assigned to it.
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to delete track');
+				return;
+			}
+
 			triggerToast(`Track "${track.name}" removed successfully.`);
+			await loadTracks();
+		} catch {
+			triggerToast('Failed to delete track');
 		}
 	}
 
@@ -202,7 +276,6 @@
 			</div>
 			<div class="mt-4">
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Tracks</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+0 this semester</span>
 			</div>
 		</div>
 
@@ -232,7 +305,6 @@
 			</div>
 			<div class="mt-4">
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Tracks</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">2 new this year</span>
 			</div>
 		</div>
 
@@ -264,7 +336,6 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Personality Development
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+6 this month</span>
 			</div>
 		</div>
 
@@ -296,7 +367,6 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Skill Building
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+4 this month</span>
 			</div>
 		</div>
 	</section>
@@ -606,20 +676,6 @@
 						class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355 resize-none"
 					></textarea>
 				</div>
-
-				<div class="flex flex-col gap-1.5">
-					<label
-						for="new-track-activities"
-						class="text-[10px] font-extrabold text-slate-650 tracking-wider">TOTAL ACTIVITIES</label
-					>
-					<input
-						id="new-track-activities"
-						type="number"
-						bind:value={newTrackActivities}
-						min="0"
-						class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
-					/>
-				</div>
 			</div>
 
 			<div
@@ -712,35 +768,19 @@
 					></textarea>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
-					<div class="flex flex-col gap-1.5">
-						<label
-							for="edit-track-activities"
-							class="text-[10px] font-extrabold text-slate-650 tracking-wider"
-							>TOTAL ACTIVITIES</label
-						>
-						<input
-							id="edit-track-activities"
-							type="number"
-							bind:value={editTrackActivities}
-							min="0"
-							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
-						/>
-					</div>
-					<div class="flex flex-col gap-1.5">
-						<label
-							for="edit-track-status"
-							class="text-[10px] font-extrabold text-slate-650 tracking-wider">STATUS</label
-						>
-						<select
-							id="edit-track-status"
-							bind:value={editTrackStatus}
-							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:border-slate-355"
-						>
-							<option value="Active">Active</option>
-							<option value="Inactive">Inactive</option>
-						</select>
-					</div>
+				<div class="flex flex-col gap-1.5">
+					<label
+						for="edit-track-status"
+						class="text-[10px] font-extrabold text-slate-650 tracking-wider">STATUS</label
+					>
+					<select
+						id="edit-track-status"
+						bind:value={editTrackStatus}
+						class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:border-slate-355"
+					>
+						<option value="Active">Active</option>
+						<option value="Inactive">Inactive</option>
+					</select>
 				</div>
 			</div>
 

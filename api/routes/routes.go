@@ -57,6 +57,8 @@ func SetupRoutes(app *fiber.App) {
 	// Must change the password
 	admin.Post("/change-password", controllers.AdminChangePassword)
 
+	admin.Get("/profile", controllers.GetAdminProfile)
+	admin.Put("/profile", controllers.UpdateAdminProfile)
 	admin.Get("/students", controllers.GetAllStudents)
 	admin.Get("/students/:roll", controllers.GetStudentDetail)
 
@@ -66,5 +68,18 @@ func SetupRoutes(app *fiber.App) {
 	platform.Get("/users", controllers.GetPlatformUsers)
 	platform.Post("/users", controllers.CreatePlatformUser)
 	platform.Delete("/users/:id", controllers.DeletePlatformUser)
+
+	// System settings
+	platform.Get("/settings", controllers.GetPlatformSettings)
+	platform.Put("/settings", controllers.UpdatePlatformSettings)
+	platform.Put("/settings/:key", controllers.UpdatePlatformSetting)
+
+	// Track management
+	platform.Get("/tracks/stats", controllers.GetTrackStats)
+	platform.Get("/tracks", controllers.GetTracks)
+	platform.Post("/tracks", controllers.CreateTrack)
+	platform.Get("/tracks/:id", controllers.GetTrack)
+	platform.Put("/tracks/:id", controllers.UpdateTrack)
+	platform.Delete("/tracks/:id", controllers.DeleteTrack)
 
 }

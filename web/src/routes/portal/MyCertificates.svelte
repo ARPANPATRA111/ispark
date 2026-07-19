@@ -445,11 +445,13 @@
 						</td>
 						<td class="py-4 px-5 text-slate-600 font-semibold">{cert.verifiedBy}</td>
 						<td class="py-4 px-5">
-							<div class="flex items-center justify-center gap-2">
+							<div
+								class="grid min-w-[190px] grid-cols-[80px_100px] items-center justify-center gap-2"
+							>
 								<!-- View Button -->
 								<button
 									onclick={() => openModal(cert)}
-									class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase rounded-lg transition-colors focus:outline-none"
+									class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] uppercase rounded-lg transition-colors focus:outline-none justify-center"
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
@@ -518,6 +520,8 @@
 										</svg>
 										Re-upload
 									</button>
+								{:else}
+									<span class="w-[100px]" aria-hidden="true"></span>
 								{/if}
 							</div>
 						</td>

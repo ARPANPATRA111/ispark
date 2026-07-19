@@ -44,10 +44,22 @@ func ConnectDB() {
 
 	// Auto Migration
 	log.Println("Running AutoMigration...")
-	err = DB.AutoMigrate(&models.Student{}, &models.OTP{}, &models.Admin{}, &models.Activity{}, &models.Certificate{}, &models.Enrollment{})
+	err = DB.AutoMigrate(&models.Student{}, &models.OTP{}, &models.Admin{}, &models.Activity{}, &models.Certificate{}, &models.Enrollment{}, &models.SystemSetting{}, &models.Track{})
 
 	if err != nil {
 		log.Fatalf("Failed to run database migrations: %v", err)
 	}
 	log.Println("Database migration completed.")
+
+	// Safe data migration: backfill coordinator_id from matching admin Name if it is empty/null
+	var admins []models.Admin
+	if err := DB.Find(&admins).Error; err == nil {
+		for _, admin := range admins {
+			if err := DB.Model(&models.Activity{}).
+				Where("coordinator = ? AND (coordinator_id = ? OR coordinator_id IS NULL)", admin.Name, "").
+				Update("coordinator_id", admin.AdminID).Error; err != nil {
+				log.Printf("Warning: Failed to backfill coordinator_id for admin %s: %v", admin.AdminID, err)
+			}
+		}
+	}
 }

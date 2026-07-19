@@ -24,6 +24,7 @@ type Student struct {
 	Certificates []Certificate  `gorm:"foreignKey:StudentRollNo" json:"certificates"`
 	Enrollments  []Enrollment   `gorm:"foreignKey:StudentRollNo" json:"enrollments"`
 
+	Batch               string `gorm:"-" json:"batch"`
 	CreditsEarned       int    `gorm:"-" json:"credits_earned"`
 	ActivityCount       int    `gorm:"-" json:"activity_count"`
 	PendingCertificates int    `gorm:"-" json:"pending_certificates"`
