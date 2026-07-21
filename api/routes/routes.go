@@ -82,4 +82,13 @@ func SetupRoutes(app *fiber.App) {
 	platform.Put("/tracks/:id", controllers.UpdateTrack)
 	platform.Delete("/tracks/:id", controllers.DeleteTrack)
 
+	// Announcement management
+	platform.Get("/announcements/stats", controllers.GetAnnouncementStats)
+	platform.Get("/announcements", controllers.GetAnnouncements)
+	platform.Post("/announcements", controllers.CreateAnnouncement)
+	platform.Get("/announcements/:id", controllers.GetAnnouncement)
+	platform.Put("/announcements/:id", controllers.UpdateAnnouncement)
+	platform.Delete("/announcements/:id", controllers.DeleteAnnouncement)
+	platform.Post("/announcements/:id/publish", controllers.PublishAnnouncement)
+
 }

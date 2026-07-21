@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
+	import { API_BASE_URL } from '$lib/config';
 
 	// ── Types ────────────────────────────────────────────────────────────────
 	type AnnouncementStatus = 'active' | 'draft' | 'scheduled' | 'expired';
@@ -8,7 +10,7 @@
 	type Priority = 'Low' | 'Medium' | 'High';
 
 	interface Announcement {
-		id: string;
+		id: number;
 		title: string;
 		description: string;
 		category: Category;
@@ -19,59 +21,77 @@
 		status: AnnouncementStatus;
 	}
 
+	interface AnnouncementApiResponse {
+		id: number;
+		title: string;
+		description: string;
+		category: Category;
+		audience: AudienceType;
+		priority: Priority;
+		publish_date: string;
+		expiry_date: string;
+		status: AnnouncementStatus;
+	}
+
 	type FilterKey = 'All' | 'Active' | 'Draft' | 'Scheduled' | 'Expired';
 
-	// ── Announcement Registry (mock data — replace with API-backed data) ──────
-	let announcements = $state<Announcement[]>([
-		{
-			id: 'ann-1',
-			title: 'Mid-Semester Activity Submission Deadline',
-			description:
-				'All students must submit their extracurricular activity proof documents before the deadline to receive credit for the current semester.',
-			category: 'Academic',
-			audience: 'Students',
-			priority: 'High',
-			publishDate: '2025-06-10',
-			expiryDate: '2025-07-15',
-			status: 'active'
-		},
-		{
-			id: 'ann-2',
-			title: 'Mentor Orientation Schedule',
-			description:
-				'New mentor orientation sessions have been scheduled. Please review the timings and confirm your attendance.',
-			category: 'Events',
-			audience: 'Mentors',
-			priority: 'Medium',
-			publishDate: '2025-06-14',
-			expiryDate: '2025-06-30',
-			status: 'active'
-		},
-		{
-			id: 'ann-3',
-			title: 'Updated Credit Policy Guidelines',
-			description:
-				'The credit distribution policy has been revised for the current academic year. All users should review the updated guidelines.',
-			category: 'General',
-			audience: 'All Users',
-			priority: 'Low',
-			publishDate: '2025-06-20',
-			expiryDate: '2025-08-01',
-			status: 'draft'
-		},
-		{
-			id: 'ann-4',
-			title: 'Activity Registration Reminder',
-			description:
-				'Students who have not yet registered for their extracurricular activities should do so before the registration window closes.',
-			category: 'Activities',
-			audience: 'Students',
-			priority: 'Medium',
-			publishDate: '2025-05-01',
-			expiryDate: '2025-05-31',
-			status: 'expired'
+	const announcementsEndpoint = `${API_BASE_URL}/api/admin/platform/announcements`;
+	let announcements = $state<Announcement[]>([]);
+	let isLoading = $state(true);
+	let loadError = $state('');
+	let isSaving = $state(false);
+	let actionId = $state<number | null>(null);
+
+	function fromApiAnnouncement(item: AnnouncementApiResponse): Announcement {
+		return {
+			id: item.id,
+			title: item.title,
+			description: item.description,
+			category: item.category,
+			audience: item.audience,
+			priority: item.priority,
+			publishDate: item.publish_date,
+			expiryDate: item.expiry_date,
+			status: item.status
+		};
+	}
+
+	async function apiRequest<T>(
+		url: string,
+		options: { method?: string; body?: string; headers?: Record<string, string> } = {}
+	): Promise<T> {
+		const token = localStorage.getItem('superadmin_token') || '';
+		const response = await fetch(url, {
+			...options,
+			headers: {
+				Authorization: `Bearer ${token}`,
+				...(options.body ? { 'Content-Type': 'application/json' } : {}),
+				...options.headers
+			}
+		});
+		const body = await response.json().catch(() => ({}));
+		if (!response.ok) {
+			throw new Error(body.error || 'Announcement request failed');
 		}
-	]);
+		return body as T;
+	}
+
+	async function loadAnnouncements() {
+		isLoading = true;
+		loadError = '';
+		try {
+			const response = await apiRequest<{ announcements: AnnouncementApiResponse[] }>(
+				announcementsEndpoint
+			);
+			announcements = response.announcements.map(fromApiAnnouncement);
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Could not load announcements.';
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	onMount(loadAnnouncements);
 
 	let announcementFilter = $state<FilterKey>('All');
 	let announcementSearch = $state('');
@@ -95,7 +115,9 @@
 	let activeAnnouncementsCount = $derived(
 		announcements.filter((a) => a.status === 'active').length
 	);
-	let draftAnnouncementsCount = $derived(announcements.filter((a) => a.status === 'draft').length);
+	let scheduledAnnouncementsCount = $derived(
+		announcements.filter((a) => a.status === 'scheduled').length
+	);
 	let expiredAnnouncementsCount = $derived(
 		announcements.filter((a) => a.status === 'expired').length
 	);
@@ -173,7 +195,7 @@
 	// ── Create / Edit Announcement modal ─────────────────────────────────────
 	let isFormModalOpen = $state(false);
 	let formMode = $state<'create' | 'edit'>('create');
-	let editingId = $state<string | null>(null);
+	let editingId = $state<number | null>(null);
 
 	let formTitle = $state('');
 	let formDescription = $state('');
@@ -201,6 +223,9 @@
 	function openCreateAnnouncement() {
 		resetForm();
 		formMode = 'create';
+		const now = Date.now();
+		formPublishDate = new Date(now).toISOString().slice(0, 10);
+		formExpiryDate = new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 		isFormModalOpen = true;
 	}
 
@@ -219,7 +244,7 @@
 		isFormModalOpen = true;
 	}
 
-	function handleSaveAnnouncement(e: Event) {
+	async function handleSaveAnnouncement(e: Event) {
 		e.preventDefault();
 
 		if (!formTitle.trim() || !formPublishDate || !formExpiryDate) {
@@ -232,41 +257,47 @@
 			return;
 		}
 
-		if (formMode === 'create') {
-			const newItem: Announcement = {
-				id: `ann-${Date.now()}`,
-				title: formTitle.trim(),
-				description: formDescription.trim(),
-				category: formCategory,
-				audience: formAudience,
-				priority: formPriority,
-				publishDate: formPublishDate,
-				expiryDate: formExpiryDate,
-				status: formStatus
-			};
-			announcements = [newItem, ...announcements];
-			triggerToast(`Announcement "${newItem.title}" published successfully!`);
-		} else if (editingId) {
-			announcements = announcements.map((a) =>
-				a.id === editingId
-					? {
-							...a,
-							title: formTitle.trim(),
-							description: formDescription.trim(),
-							category: formCategory,
-							audience: formAudience,
-							priority: formPriority,
-							publishDate: formPublishDate,
-							expiryDate: formExpiryDate,
-							status: formStatus
-						}
-					: a
+		isSaving = true;
+		formError = '';
+		try {
+			const response = await apiRequest<{ announcement: AnnouncementApiResponse }>(
+				formMode === 'create' ? announcementsEndpoint : `${announcementsEndpoint}/${editingId}`,
+				{
+					method: formMode === 'create' ? 'POST' : 'PUT',
+					body: JSON.stringify({
+						title: formTitle.trim(),
+						description: formDescription.trim(),
+						category: formCategory,
+						audience: formAudience,
+						priority: formPriority,
+						publish_date: formPublishDate,
+						expiry_date: formExpiryDate,
+						status: formStatus
+					})
+				}
 			);
-			triggerToast(`Announcement "${formTitle.trim()}" updated successfully!`);
+			const saved = fromApiAnnouncement(response.announcement);
+			if (formMode === 'create') {
+				announcements = [saved, ...announcements];
+			} else {
+				announcements = announcements.map((item) => (item.id === saved.id ? saved : item));
+			}
+			const action =
+				saved.status === 'draft'
+					? 'saved as a draft'
+					: saved.status === 'scheduled'
+						? 'scheduled successfully'
+						: saved.status === 'active'
+							? 'published successfully'
+							: 'updated successfully';
+			triggerToast(`Announcement "${saved.title}" ${action}.`);
+			isFormModalOpen = false;
+			resetForm();
+		} catch (error) {
+			formError = error instanceof Error ? error.message : 'Could not save the announcement.';
+		} finally {
+			isSaving = false;
 		}
-
-		isFormModalOpen = false;
-		resetForm();
 	}
 
 	// ── View Announcement modal ──────────────────────────────────────────────
@@ -279,19 +310,44 @@
 	}
 
 	// ── Delete ────────────────────────────────────────────────────────────────
-	function handleDeleteAnnouncement(item: Announcement) {
-		if (confirm(`Are you sure you want to delete "${item.title}"?`)) {
-			announcements = announcements.filter((a) => a.id !== item.id);
+	async function handleDeleteAnnouncement(item: Announcement) {
+		if (!confirm(`Are you sure you want to delete "${item.title}"?`)) return;
+		actionId = item.id;
+		loadError = '';
+		try {
+			await apiRequest(`${announcementsEndpoint}/${item.id}`, { method: 'DELETE' });
+			announcements = announcements.filter((announcement) => announcement.id !== item.id);
+			if (viewAnnouncement?.id === item.id) {
+				isViewAnnouncementModalOpen = false;
+				viewAnnouncement = null;
+			}
 			triggerToast(`Announcement "${item.title}" removed successfully.`);
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Could not delete the announcement.';
+		} finally {
+			actionId = null;
 		}
 	}
 
 	// ── Publish (draft → active) ─────────────────────────────────────────────
-	function handlePublishAnnouncement(item: Announcement) {
-		announcements = announcements.map((a) => (a.id === item.id ? { ...a, status: 'active' } : a));
-		triggerToast(`Announcement "${item.title}" is now live.`);
-		if (viewAnnouncement && viewAnnouncement.id === item.id) {
-			viewAnnouncement = { ...viewAnnouncement, status: 'active' };
+	async function handlePublishAnnouncement(item: Announcement) {
+		actionId = item.id;
+		loadError = '';
+		try {
+			const response = await apiRequest<{ announcement: AnnouncementApiResponse }>(
+				`${announcementsEndpoint}/${item.id}/publish`,
+				{ method: 'POST' }
+			);
+			const published = fromApiAnnouncement(response.announcement);
+			announcements = announcements.map((announcement) =>
+				announcement.id === published.id ? published : announcement
+			);
+			if (viewAnnouncement?.id === published.id) viewAnnouncement = published;
+			triggerToast(`Announcement "${published.title}" is now live.`);
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Could not publish the announcement.';
+		} finally {
+			actionId = null;
 		}
 	}
 </script>
@@ -365,12 +421,14 @@
 			</div>
 		</div>
 
-		<!-- Draft -->
+		<!-- Scheduled -->
 		<div
 			class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-2xl font-bold font-serif text-slate-900">{draftAnnouncementsCount}</span>
+				<span class="text-2xl font-bold font-serif text-slate-900"
+					>{scheduledAnnouncementsCount}</span
+				>
 				<div class="p-2.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100">
 					<!-- Pencil icon -->
 					<svg
@@ -395,8 +453,8 @@
 				</div>
 			</div>
 			<div class="mt-4">
-				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Draft</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">Not yet published</span>
+				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Scheduled</h3>
+				<span class="text-[11px] font-bold text-slate-400 mt-1 block">Queued for publishing</span>
 			</div>
 		</div>
 
@@ -511,6 +569,18 @@
 			</div>
 		</div>
 
+		{#if loadError}
+			<div
+				class="px-5 py-3 bg-red-50 border-b border-red-100 text-xs font-semibold text-red-700"
+				role="alert"
+			>
+				{loadError}
+				<button type="button" onclick={loadAnnouncements} class="ml-2 font-bold underline"
+					>Retry</button
+				>
+			</div>
+		{/if}
+
 		<!-- Table -->
 		<div class="overflow-x-auto">
 			<table class="w-full text-left border-collapse">
@@ -529,7 +599,13 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-slate-100 text-xs font-sans">
-					{#if filteredAnnouncements.length === 0}
+					{#if isLoading}
+						<tr>
+							<td colspan="8" class="py-8 text-center text-slate-400 font-semibold select-none">
+								Loading announcements...
+							</td>
+						</tr>
+					{:else if filteredAnnouncements.length === 0}
 						<tr>
 							<td colspan="8" class="py-8 text-center text-slate-400 font-semibold select-none">
 								No announcements found matching search filters.
@@ -587,6 +663,7 @@
 											<button
 												type="button"
 												onclick={() => handlePublishAnnouncement(item)}
+												disabled={actionId === item.id}
 												aria-label="Publish announcement"
 												title="Publish"
 												class="text-emerald-500 hover:text-emerald-700 transition-colors p-0.5"
@@ -636,6 +713,7 @@
 										<button
 											type="button"
 											onclick={() => openEditAnnouncement(item)}
+											disabled={actionId === item.id}
 											aria-label="Edit announcement"
 											class="text-amber-500 hover:text-amber-700 transition-colors p-0.5"
 										>
@@ -657,6 +735,7 @@
 										<button
 											type="button"
 											onclick={() => handleDeleteAnnouncement(item)}
+											disabled={actionId === item.id}
 											aria-label="Delete announcement"
 											class="text-rose-500 hover:text-rose-700 transition-colors p-0.5"
 										>
@@ -919,9 +998,10 @@
 				</button>
 				<button
 					type="submit"
+					disabled={isSaving}
 					class="px-4 py-2 bg-[#881B1B] hover:bg-[#881B1B]/90 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
 				>
-					{formMode === 'create' ? 'Publish Announcement' : 'Save Changes'}
+					{isSaving ? 'Saving...' : formMode === 'create' ? 'Save Announcement' : 'Save Changes'}
 				</button>
 			</div>
 		</form>
@@ -1052,6 +1132,7 @@
 					<button
 						type="button"
 						onclick={() => viewAnnouncement && handlePublishAnnouncement(viewAnnouncement)}
+						disabled={actionId === viewAnnouncement.id}
 						class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
 					>
 						Publish

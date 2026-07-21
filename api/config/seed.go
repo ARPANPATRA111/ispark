@@ -70,8 +70,74 @@ func SeedDevData() {
 		return
 	}
 
+	if err := seedAnnouncements(); err != nil {
+		log.Printf("Seeding announcements failed: %v", err)
+		return
+	}
+
 	log.Printf("Demo data ready: %d students, %d activities. Every account's password is %q.",
 		len(students), len(activities), DevPassword)
+}
+
+// ---------------------------------------------------------------------------
+// Announcements
+// ---------------------------------------------------------------------------
+
+func seedAnnouncements() error {
+	today := time.Now().In(time.FixedZone("Asia/Kolkata", 5*60*60+30*60))
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	announcements := []models.Announcement{
+		{
+			Title:       "Mid-Semester Activity Submission Deadline",
+			Description: "Submit extracurricular activity proof before the deadline to receive semester credit.",
+			Category:    "Academic",
+			Audience:    "Students",
+			Priority:    "High",
+			PublishDate: today.AddDate(0, 0, -7),
+			ExpiryDate:  today.AddDate(0, 0, 30),
+			Status:      "active",
+		},
+		{
+			Title:       "Mentor Orientation Schedule",
+			Description: "New mentor orientation sessions are scheduled for next week.",
+			Category:    "Events",
+			Audience:    "Mentors",
+			Priority:    "Medium",
+			PublishDate: today.AddDate(0, 0, 7),
+			ExpiryDate:  today.AddDate(0, 0, 45),
+			Status:      "scheduled",
+		},
+		{
+			Title:       "Updated Credit Policy Guidelines",
+			Description: "Review the revised credit distribution policy for the current academic year.",
+			Category:    "General",
+			Audience:    "All Users",
+			Priority:    "Low",
+			PublishDate: today.AddDate(0, 0, 14),
+			ExpiryDate:  today.AddDate(0, 0, 60),
+			Status:      "draft",
+		},
+		{
+			Title:       "Activity Registration Reminder",
+			Description: "The previous activity registration window has closed.",
+			Category:    "Activities",
+			Audience:    "Students",
+			Priority:    "Medium",
+			PublishDate: today.AddDate(0, 0, -60),
+			ExpiryDate:  today.AddDate(0, 0, -5),
+			Status:      "expired",
+		},
+	}
+
+	for _, announcement := range announcements {
+		var existing models.Announcement
+		if err := DB.Where(models.Announcement{Title: announcement.Title}).
+			Attrs(announcement).
+			FirstOrCreate(&existing).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
