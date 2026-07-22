@@ -270,6 +270,38 @@ $env:TEST_EMAIL_BASE="you@example.com"   # real inbox: avoids bounces, since SMT
 node scripts/api-regression.mjs
 ```
 
+### 6.0.2 Keeping the free tiers awake
+
+Two sleep policies apply: Render spins the API down after **15 minutes** without an inbound HTTP request, and Supabase pauses a project after **7 days** without database activity. Both are covered by two independent mechanisms, so neither is a single point of failure.
+
+**The key idea:** `GET /health/db` runs a real `SELECT` against the database. One request to it therefore resets Render's idle timer *and* registers as Supabase activity — a single ping solves both problems. (`/health` stays database-free so a database outage can never fail Render's own health check and take the API down.)
+
+| Mechanism                                                 | Runs where                  | Covers            |
+| --------------------------------------------------------- | --------------------------- | ----------------- |
+| Uptime monitor calling `/health/db` every 10 min          | external (UptimeRobot etc.) | Render + Supabase |
+| `keepalive-ping-api` pg_cron job, every 10 min via pg_net | inside Supabase             | Render + Supabase |
+| `keepalive-write` / `keepalive-delete` pg_cron jobs       | inside Supabase             | Supabase          |
+
+Apply the database side with:
+
+```powershell
+node scripts/db.mjs --file scripts/sql/keepalive.sql
+```
+
+That creates `ops.keepalive` (in a non-public schema, so PostgREST cannot expose it) and schedules three jobs: a heartbeat row written at 10:00 on days 1/6/11/16/21/26, deleted at 08:00 the next day, and an HTTP call to `/health/db` every 10 minutes. Schedules are **UTC** — subtract 5h30m from an IST time.
+
+Inspect or change them:
+
+```powershell
+node scripts/db.mjs "select jobname, schedule, active from cron.job"
+node scripts/db.mjs "select jobname, status, start_time from cron.job_run_details order by start_time desc limit 10"
+node scripts/db.mjs "select status_code, created from net._http_response order by id desc limit 5"
+```
+
+> **Render does not detect or block keep-alive traffic.** Its rule is purely "no inbound request for 15 minutes". Staggering monitors to look human is unnecessary; a second monitor is only worth adding for redundancy if the first lapses.
+
+> **Watch the free-tier budget.** Keeping the API awake 24/7 costs ~730 of Render's 750 free instance-hours per month, leaving almost no headroom for a second service. If you only need it responsive during working hours, pause the monitor overnight (or narrow the pg_cron schedule to, say, `*/10 3-18 * * *` UTC = 08:30–23:30 IST) and roughly halve the usage.
+
 ### 6.0.1 Database access and security
 
 Query either database without Docker or psql:
