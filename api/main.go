@@ -60,6 +60,23 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
+	// Keep-alive / readiness probe. Runs a real query so a single request from
+	// an uptime monitor both resets the host's idle timer and registers as
+	// database activity, which is what stops a free-tier database being paused
+	// for inactivity. Kept separate from /health so that a database outage
+	// never fails the platform health check and takes the API down with it.
+	app.Get("/health/db", func(c *fiber.Ctx) error {
+		var result int
+		if err := config.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
+			log.Printf("Database keep-alive probe failed: %v", err)
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status":   "degraded",
+				"database": "unreachable",
+			})
+		}
+		return c.JSON(fiber.Map{"status": "ok", "database": "reachable"})
+	})
+
 	// Setup Routes
 	routes.SetupRoutes(app)
 
