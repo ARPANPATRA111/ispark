@@ -55,11 +55,12 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
+# Ignore .env and every variant (.env.local, .env.supabase, ...) so a new
+# environment file can never be committed by accident. Templates ending in
+# .example are deliberately kept.
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+!*.example
 
 # svelte-kit files
 .svelte-kit/
@@ -74,11 +75,20 @@ web_modules/
 /api/api
 /api/tmp/
 /api/.env
+# Runtime certificate upload storage (seeded + user-uploaded files)
+/api/uploads/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+
+# Supabase CLI local artifacts
+supabase/.temp/
+supabase/.branches/
+
+# Vercel CLI local artifacts
+.vercel/
 
 # IDEs and editors
 .idea/

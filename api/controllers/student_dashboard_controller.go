@@ -5,7 +5,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,10 +13,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/iips-oss/ispark/api/config"
 	"github.com/iips-oss/ispark/api/models"
+	"github.com/iips-oss/ispark/api/storage"
 	"github.com/iips-oss/ispark/api/utils"
 )
-
-const certificateUploadDir = "./uploads/certificates"
 
 // keeping it like this soo that adding more file types in future is easy.
 // If we want to allow more file types, we can just add them here.
@@ -120,16 +118,17 @@ func UploadCertificate(c *fiber.Ctx) error {
 		})
 	}
 
-	// Ensure directory exists
-	if err := os.MkdirAll(certificateUploadDir, 0o755); err != nil {
+	fileName := fmt.Sprintf("%s_%d_%s", rollNo, time.Now().UnixNano(), filepath.Base(file.Filename))
+
+	src, err := file.Open()
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create upload directory",
+			"error": "Failed to read uploaded file",
 		})
 	}
-
-	fileName := fmt.Sprintf("%s_%d_%s", rollNo, time.Now().UnixNano(), filepath.Base(file.Filename))
-	filePath := filepath.Join(certificateUploadDir, fileName)
-	if err := c.SaveFile(file, filePath); err != nil {
+	fileRef, err := storage.Default().Save(fileName, src, detectedType)
+	_ = src.Close()
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to save file",
 		})
@@ -147,13 +146,13 @@ func UploadCertificate(c *fiber.Ctx) error {
 		ParticipationType: participationType,
 		Description:       description,
 		FileName:          fileName,
-		FilePath:          filePath,
+		FilePath:          fileRef,
 		Credits:           credits,
 		Status:            "Pending",
 	}
 
 	if err := config.DB.Create(&cert).Error; err != nil {
-		_ = os.Remove(filePath)
+		_ = storage.Default().Delete(fileRef)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to save certificate record",
 		})
@@ -192,14 +191,22 @@ func DownloadCertificate(c *fiber.Ctx) error {
 		})
 	}
 
-	filePath := filepath.Join(certificateUploadDir, filepath.Base(cert.FileName))
-	if _, err := os.Stat(filePath); err != nil {
+	ref := cert.FilePath
+	if ref == "" {
+		ref = cert.FileName
+	}
+	f, err := storage.Default().Open(ref)
+	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Certificate file is no longer available",
 		})
 	}
 
-	return c.Download(filePath, cert.FileName)
+	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=%q", cert.FileName))
+	if contentType, ok := allowedCertificateTypes[strings.ToLower(filepath.Ext(cert.FileName))]; ok {
+		c.Set(fiber.HeaderContentType, contentType)
+	}
+	return c.SendStream(f)
 }
 
 // getAcademicYearDateRange returns start and end date of the academic year

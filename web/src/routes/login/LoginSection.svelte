@@ -3,6 +3,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { API_BASE_URL } from '$lib/config';
+	import { readJson } from '$lib/api';
 
 	const formId = 'student-login';
 
@@ -83,14 +84,19 @@
 		captchaLoading = true;
 		try {
 			const response = await fetch(`${API_BASE_URL}/api/auth/captcha`);
-			if (response.ok) {
-				const data = await response.json();
-				captchaID = data.captcha_id;
-				captchaQuestion = data.question;
-				captchaAnswer = '';
-			}
+			const data = await readJson(response);
+			captchaID = String(data.captcha_id ?? '');
+			captchaQuestion = String(data.question ?? '');
+			captchaAnswer = '';
 		} catch (err) {
-			console.error('Error fetching captcha:', err);
+			// Surface the failure: a blank captcha box with no explanation looks
+			// like a broken refresh button rather than an unreachable API.
+			captchaQuestion = '';
+			captchaID = '';
+			errorMsg =
+				err instanceof Error
+					? `Could not load the security check. ${err.message}`
+					: 'Could not load the security check. Please try again.';
 		} finally {
 			captchaLoading = false;
 		}
@@ -123,14 +129,14 @@
 				})
 			});
 
-			const data = await response.json();
+			const data = await readJson(response);
 
 			if (!response.ok) {
-				throw new Error(data.error || 'Invalid credentials');
+				throw new Error(String(data.error || 'Invalid credentials'));
 			}
 
 			if (data.access_token) {
-				localStorage.setItem('access_token', data.access_token);
+				localStorage.setItem('access_token', String(data.access_token));
 			}
 			loginSuccess = true;
 			setTimeout(() => {

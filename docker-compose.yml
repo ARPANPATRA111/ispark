@@ -45,6 +45,8 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
+    # Opt-in only (saves ~750MB image pull): docker compose --profile tools up -d pgadmin
+    profiles: ["tools"]
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@admin.com
       - PGADMIN_DEFAULT_PASSWORD=user

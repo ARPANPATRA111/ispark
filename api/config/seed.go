@@ -4,17 +4,16 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/iips-oss/ispark/api/models"
+	"github.com/iips-oss/ispark/api/storage"
 	"github.com/iips-oss/ispark/api/utils"
 )
 
 const DevPassword = "Pass@123"
-
-const certificateSeedDir = "./uploads/certificates"
 
 func SeedDevData() {
 	enabled, err := strconv.ParseBool(os.Getenv("SEED_DEV_DATA"))
@@ -546,8 +545,19 @@ func seedCertificates() error {
 		certNumber := fmt.Sprintf("CERT-%s-%03d", cert.rollNo, i+1)
 		fileName := fmt.Sprintf("%s_%s.pdf", cert.rollNo, certNumber)
 
-		if err := writeSeedCertificateFile(fileName, cert.activityName); err != nil {
-			return err
+		// Reuse an already-uploaded blob across boots so re-seeding stays
+		// idempotent on remote storage; local refs are cheap to rewrite.
+		ref := ""
+		var prior models.Certificate
+		if err := DB.Select("file_path").Where("cert_number = ?", certNumber).First(&prior).Error; err == nil {
+			ref = prior.FilePath
+		}
+		if ref == "" || !storage.IsBlobRef(ref) {
+			var err error
+			ref, err = saveSeedCertificateFile(fileName, cert.activityName)
+			if err != nil {
+				return err
+			}
 		}
 
 		var existing models.Certificate
@@ -563,7 +573,7 @@ func seedCertificates() error {
 				ParticipationType: cert.participationType,
 				Description:       fmt.Sprintf("%s - %s", cert.activityName, cert.participationType),
 				FileName:          fileName,
-				FilePath:          filepath.Join(certificateSeedDir, fileName),
+				FilePath:          ref,
 				Credits:           CreditsForCertificate(cert.participationType, cert.eventLevel),
 				Status:            cert.status,
 				RejectionReason:   cert.rejectionReason,
@@ -576,16 +586,7 @@ func seedCertificates() error {
 	return nil
 }
 
-func writeSeedCertificateFile(fileName, activityName string) error {
-	if err := os.MkdirAll(certificateSeedDir, 0o755); err != nil {
-		return err
-	}
-
-	path := filepath.Join(certificateSeedDir, fileName)
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	}
-
+func saveSeedCertificateFile(fileName, activityName string) (string, error) {
 	text := fmt.Sprintf("iSPARC demo certificate - %s", activityName)
 	pdf := fmt.Sprintf(`%%PDF-1.4
 1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
@@ -599,5 +600,5 @@ trailer << /Root 1 0 R >>
 %%%%EOF
 `, len(text)+30, text)
 
-	return os.WriteFile(path, []byte(pdf), 0o600)
+	return storage.Default().Save(fileName, strings.NewReader(pdf), "application/pdf")
 }
