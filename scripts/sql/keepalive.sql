@@ -21,8 +21,14 @@
 -- Schedules are in the database's timezone (UTC on Supabase). 10:00 UTC is
 -- 15:30 IST; subtract 5h30m from a desired IST time to get the UTC value.
 
+-- Install extensions outside the public schema. Supabase's "extension in
+-- public schema" advisor flags anything in public; pg_net is placed in the
+-- dedicated `extensions` schema (its functions live in the `net` schema either
+-- way, so `net.http_get` below is unaffected). pg_cron installs into
+-- `pg_catalog` on Supabase, which the advisor does not flag.
+create schema if not exists extensions;
 create extension if not exists pg_cron;
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;
 
 -- A dedicated schema: unlike `public`, it is not exposed through PostgREST, so
 -- this table can never be reached from the internet regardless of RLS.

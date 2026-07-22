@@ -27,3 +27,38 @@ export async function readJson(response: Response): Promise<Record<string, unkno
 	}
 	throw new Error('The server sent an unexpected response. Please try again.');
 }
+
+/**
+ * Fetches a protected file with a bearer token and saves it in the browser.
+ * The file endpoints require an Authorization header, so a plain anchor link
+ * cannot be used — the bytes are fetched, turned into an object URL, and a
+ * temporary link is clicked to trigger the download.
+ */
+export async function downloadAuthedFile(
+	url: string,
+	token: string,
+	fallbackName = 'certificate'
+): Promise<void> {
+	const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+	if (!response.ok) {
+		// The body is JSON on error; surface its message.
+		const data = await readJson(response).catch(() => ({}));
+		throw new Error(String((data as { error?: string }).error || 'File is not available.'));
+	}
+
+	// Prefer the server-provided filename from Content-Disposition.
+	let filename = fallbackName;
+	const disposition = response.headers.get('content-disposition') ?? '';
+	const match = /filename="?([^"]+)"?/.exec(disposition);
+	if (match) filename = match[1];
+
+	const blob = await response.blob();
+	const objectUrl = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = objectUrl;
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(objectUrl);
+}

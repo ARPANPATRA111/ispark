@@ -35,15 +35,15 @@ The automated suite already covers API happy paths, auth failures, RBAC boundari
 
 ### ⚠ Views that are KNOWN mock/prototype (no backend exists yet — do not file bugs for fake data)
 
-| View                                                        | Upstream status                                                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Admin → Dashboard stat cards                               | not wired (PR #88/#89 attempt open/closed)                                                              |
-| Admin → Certificate Verification                           | **no backend endpoints at all** (PR #102 open) — the product's approve/reject loop cannot complete yet |
-| Admin → Activity Monitoring                                | mock                                                                                                    |
-| Admin → Batch Analytics                                    | mock                                                                                                    |
-| Super admin → Activity Management                          | local-state only, changes vanish on refresh (API PR #91 open)                                           |
-| Super admin → Reports Center                               | mock (API PR #98 open)                                                                                  |
-| Super admin dashboard sub-labels ("+32 this semester" etc.) | fabricated deltas on real numbers                                                                       |
+| View                                                        | Upstream status                                                                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Admin → Dashboard stat cards                               | not wired (PR #88/#89 attempt open/closed)                                                                       |
+| Admin → Certificate Verification                           | **now wired** — lists real certificates, approve/reject persist, files download. Test it for real (section C4). |
+| Admin → Activity Monitoring                                | mock                                                                                                             |
+| Admin → Batch Analytics                                    | mock                                                                                                             |
+| Super admin → Activity Management                          | local-state only, changes vanish on refresh (API PR #91 open)                                                    |
+| Super admin → Reports Center                               | mock (API PR #98 open)                                                                                           |
+| Super admin dashboard sub-labels ("+32 this semester" etc.) | fabricated deltas on real numbers                                                                                |
 
 For these, the test is only: *page renders, doesn't crash, and is visibly a prototype*. Everything else in this plan is expected to be fully functional.
 
@@ -194,13 +194,23 @@ For these, the test is only: *page renders, doesn't crash, and is visibly a prot
 
 **Findings:** __________
 
-### C4. Prototype views render safely (Dashboard stats, Certificate Verification, Activity Monitoring, Batch Analytics)
+### C4. Certificate Verification (now wired — test the real flow)
+
+**Tester:** __________
+
+* [ ] The queue lists real pending/approved/rejected certificates for the admin's batch (`admin` = IT2K24, `admin2` = IT2K25); a super admin sees all
+* [ ] Click a certificate → **Download** saves the actual uploaded PDF (not a toast with no file)
+* [ ] **Approve** a pending certificate → reload the page → it stays Approved (persisted, not reverted)
+* [ ] Log in as that student → the certificate now shows Approved and its credits count on the dashboard
+* [ ] **Reject** a certificate → a reason is required → reload → stays Rejected with the reason; the student sees the reason
+* [ ] A batch admin cannot see or act on another batch's certificate (URL tampering → 404)
+
+### C5. Other prototype views render safely (Dashboard stats, Activity Monitoring, Batch Analytics)
 
 **Tester:** __________
 
 * [ ] Each view opens without crashing or console errors
 * [ ] Confirm they still show **mock** data (see table in §0) — record anything that has silently become half-wired
-* [ ] Certificate Verification: confirm there is **no way** to actually approve/reject (backend missing, PR #102)
 
 **Findings:** __________
 

@@ -62,6 +62,12 @@ func SetupRoutes(app *fiber.App) {
 	admin.Get("/students", controllers.GetAllStudents)
 	admin.Get("/students/:roll", controllers.GetStudentDetail)
 
+	// Certificate verification (batch-scoped for admins, all for super admin)
+	admin.Get("/certificates", controllers.GetAdminCertificates)
+	admin.Get("/certificates/:id/file", controllers.DownloadAdminCertificate)
+	admin.Post("/certificates/:id/approve", controllers.ApproveCertificate)
+	admin.Post("/certificates/:id/reject", controllers.RejectCertificate)
+
 	// Platform-wide routes, super admin only
 	platform := admin.Group("/platform", middleware.RoleRequired("superadmin"))
 	platform.Get("/stats", controllers.GetPlatformStats)

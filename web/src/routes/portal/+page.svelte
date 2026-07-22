@@ -291,7 +291,10 @@
 
 	function triggerAction(actionName: string) {
 		if (actionName === 'Upload Certificate') {
-			isUploadModalOpen = true;
+			// Use the full Upload Certificate form. The activity name, date and
+			// participation type are required by the API, so a file-only quick
+			// modal cannot produce a valid submission.
+			currentTab = 'Upload Certificate';
 		} else if (actionName === 'Browse Activities') {
 			currentTab = 'Activities';
 		} else if (actionName === 'Download Marksheet') {
@@ -1500,7 +1503,7 @@
 				{:else if currentTab === 'Extracurricular Marksheet'}
 					<ExtracurricularMarksheet />
 				{:else if currentTab === 'My Enrollments'}
-					<MyEnrollments onUploadCertificate={() => (isUploadModalOpen = true)} />
+					<MyEnrollments onUploadCertificate={() => (currentTab = 'Upload Certificate')} />
 				{:else if currentTab === 'My Certificates'}
 					<MyCertificates
 						onTabChange={(tab) => (currentTab = tab)}

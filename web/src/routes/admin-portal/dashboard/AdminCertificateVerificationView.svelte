@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
+	import { API_BASE_URL } from '$lib/config';
+	import { readJson, downloadAuthedFile } from '$lib/api';
 
 	// ── Types ──────────────────────────────────────────────────────────────────
 	type CertStatus = 'Pending' | 'Approved' | 'Rejected';
 
 	interface Certificate {
 		id: string;
+		rawId: number; // numeric id used for the API calls
 		student: string;
 		regNo: string;
 		name: string;
@@ -18,192 +22,77 @@
 		remarks: string;
 	}
 
-	// ── Mock Data ──────────────────────────────────────────────────────────────
-	let certificates = $state<Certificate[]>([
-		{
-			id: 'CERT-2041',
-			student: 'Priya Sharma',
-			regNo: 'EN22001',
-			name: 'National-Level Hackathon',
-			type: 'Competition',
-			submittedOn: '20 Jun 2025',
-			status: 'Pending',
-			priority: true,
-			relatedActivity: 'TechFest 2025',
-			creditsRequested: 4,
-			remarks:
-				'This certificate was awarded for active participation and outstanding performance in the respective event. I respectfully request approval for extracurricular credit under the iSPARC portal guidelines.'
-		},
-		{
-			id: 'CERT-2040',
-			student: 'Arjun Mehta',
-			regNo: 'EN22014',
-			name: 'Python Programming Course',
-			type: 'Course',
-			submittedOn: '27 Jun 2025',
-			status: 'Approved',
-			priority: false,
-			relatedActivity: 'Online Learning',
-			creditsRequested: 3,
-			remarks: 'Completed an 8-week certified online programming course with a final score of 92%.'
-		},
-		{
-			id: 'CERT-2039',
-			student: 'Kavya Nair',
-			regNo: 'EN22008',
-			name: 'Leadership Summit Participation',
-			type: 'Seminar',
-			submittedOn: '18 Jun 2025',
-			status: 'Approved',
-			priority: false,
-			relatedActivity: 'Leadership Program',
-			creditsRequested: 3,
-			remarks: 'Attended a two-day national leadership summit as a delegate representative.'
-		},
-		{
-			id: 'CERT-2038',
-			student: 'Rohan Verma',
-			regNo: 'EN23009',
-			name: 'Sports Achievement – District',
-			type: 'Sports',
-			submittedOn: '15 Jun 2025',
-			status: 'Pending',
-			priority: true,
-			relatedActivity: 'Inter-College Sports',
-			creditsRequested: 5,
-			remarks: 'Secured first position at the district-level athletics championship.'
-		},
-		{
-			id: 'CERT-2037',
-			student: 'Sneha Iyer',
-			regNo: 'EN22015',
-			name: 'Cultural Fest – Best Performer',
-			type: 'Cultural',
-			submittedOn: '12 Jun 2025',
-			status: 'Rejected',
-			priority: false,
-			relatedActivity: 'Annual Cultural Fest',
-			creditsRequested: 4,
-			remarks: 'Certificate image was unclear and event authorisation could not be verified.'
-		},
-		{
-			id: 'CERT-2036',
-			student: 'Dev Patel',
-			regNo: 'EN23014',
-			name: 'Research Paper Presentation',
-			type: 'Research',
-			submittedOn: '10 Jun 2025',
-			status: 'Pending',
-			priority: false,
-			relatedActivity: 'National Conference',
-			creditsRequested: 6,
-			remarks: 'Presented a peer-reviewed research paper at a national-level academic conference.'
-		},
-		{
-			id: 'CERT-2035',
-			student: 'Ananya Singh',
-			regNo: 'EN23003',
-			name: 'Community Service Certificate',
-			type: 'Service',
-			submittedOn: '08 Jun 2025',
-			status: 'Pending',
-			priority: false,
-			relatedActivity: 'NSS Camp',
-			creditsRequested: 4,
-			remarks: 'Completed 40 hours of community service during the annual NSS special camp.'
-		},
-		{
-			id: 'CERT-2034',
-			student: 'Meera Krishnan',
-			regNo: 'EN23021',
-			name: 'Workshop on AI Ethics',
-			type: 'Workshop',
-			submittedOn: '05 Jun 2025',
-			status: 'Approved',
-			priority: false,
-			relatedActivity: 'Tech Workshop',
-			creditsRequested: 2,
-			remarks: 'Participated in a hands-on workshop covering responsible and ethical AI practices.'
-		},
-		{
-			id: 'CERT-2033',
-			student: 'Karan Joshi',
-			regNo: 'EN22011',
-			name: 'Blood Donation Certificate',
-			type: 'Service',
-			submittedOn: '02 Jun 2025',
-			status: 'Approved',
-			priority: false,
-			relatedActivity: 'Red Cross Drive',
-			creditsRequested: 2,
-			remarks: 'Voluntarily donated blood at the institute-organised Red Cross donation drive.'
-		},
-		{
-			id: 'CERT-2032',
-			student: 'Aditya Rao',
-			regNo: 'EN22019',
-			name: 'Web Development Bootcamp',
-			type: 'Course',
-			submittedOn: '28 May 2025',
-			status: 'Pending',
-			priority: false,
-			relatedActivity: 'Skill Program',
-			creditsRequested: 3,
-			remarks: 'Completed an intensive full-stack web development bootcamp with a capstone project.'
-		},
-		{
-			id: 'CERT-2031',
-			student: 'Nisha Gupta',
-			regNo: 'EN23018',
-			name: 'State Debate Championship',
-			type: 'Competition',
-			submittedOn: '25 May 2025',
-			status: 'Pending',
-			priority: true,
-			relatedActivity: 'Debate League',
-			creditsRequested: 5,
-			remarks: 'Reached the finals of the state-level inter-university debate championship.'
-		},
-		{
-			id: 'CERT-2030',
-			student: 'Varun Nair',
-			regNo: 'EN22022',
-			name: 'Robotics Seminar',
-			type: 'Seminar',
-			submittedOn: '22 May 2025',
-			status: 'Approved',
-			priority: false,
-			relatedActivity: 'Robotics Club',
-			creditsRequested: 3,
-			remarks: 'Attended and volunteered at a two-day seminar on autonomous robotics systems.'
-		},
-		{
-			id: 'CERT-2029',
-			student: 'Isha Reddy',
-			regNo: 'EN23027',
-			name: 'Yoga & Wellness Workshop',
-			type: 'Workshop',
-			submittedOn: '20 May 2025',
-			status: 'Pending',
-			priority: false,
-			relatedActivity: 'Wellness Program',
-			creditsRequested: 2,
-			remarks: 'Completed a certified workshop on yoga, mindfulness and student wellness.'
-		},
-		{
-			id: 'CERT-2028',
-			student: 'Manav Shah',
-			regNo: 'EN22030',
-			name: 'City Marathon Participation',
-			type: 'Sports',
-			submittedOn: '18 May 2025',
-			status: 'Rejected',
-			priority: false,
-			relatedActivity: 'City Marathon',
-			creditsRequested: 3,
-			remarks: 'Participation record could not be matched with the official event registry.'
+	interface BackendCertificate {
+		id: number;
+		student_roll_no: string;
+		student_name: string;
+		activity_name: string;
+		activity_category: string;
+		participation_type: string;
+		organizer_name: string;
+		event_level: string;
+		credits: number;
+		status: CertStatus;
+		description: string;
+		rejection_reason: string;
+		activity_date: string;
+		created_at: string;
+	}
+
+	function adminToken(): string {
+		return localStorage.getItem('admin_token') ?? '';
+	}
+
+	function formatDate(iso: string): string {
+		if (!iso) return '—';
+		const d = new Date(iso);
+		return Number.isNaN(d.getTime())
+			? '—'
+			: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+	}
+
+	function mapCertificate(c: BackendCertificate): Certificate {
+		const highLevel = /national|international/i.test(c.event_level || '');
+		return {
+			id: `CERT-${c.id}`,
+			rawId: c.id,
+			student: c.student_name || c.student_roll_no,
+			regNo: c.student_roll_no,
+			name: c.activity_name,
+			type: c.activity_category || c.participation_type || '—',
+			submittedOn: formatDate(c.created_at),
+			status: c.status,
+			priority: c.status === 'Pending' && highLevel,
+			relatedActivity: c.organizer_name || '—',
+			creditsRequested: c.credits,
+			remarks: c.rejection_reason || c.description || '—'
+		};
+	}
+
+	// Loaded from the API in onMount below.
+	let certificates = $state<Certificate[]>([]);
+	let loading = $state(true);
+	let loadError = $state('');
+
+	async function loadCertificates() {
+		loading = true;
+		loadError = '';
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates`, {
+				headers: { Authorization: `Bearer ${adminToken()}` }
+			});
+			const data = await readJson(res);
+			if (!res.ok) throw new Error(String(data.error || 'Failed to load certificates'));
+			certificates = ((data.certificates as BackendCertificate[]) ?? []).map(mapCertificate);
+			if (certificates.length > 0) selectedId = certificates[0].id;
+		} catch (err) {
+			loadError = err instanceof Error ? err.message : 'Failed to load certificates';
+		} finally {
+			loading = false;
 		}
-	]);
+	}
+
+	onMount(loadCertificates);
 
 	// ── Derived Stats ──────────────────────────────────────────────────────────
 	const pendingCount = $derived(certificates.filter((c) => c.status === 'Pending').length);
@@ -262,18 +151,73 @@
 	const selectedCert = $derived(certificates.find((c) => c.id === selectedId) ?? certificates[0]);
 
 	// ── Actions ──────────────────────────────────────────────────────────────────
-	function approveCert(cert: Certificate) {
-		certificates = certificates.map((c) =>
-			c.id === cert.id ? { ...c, status: 'Approved' as CertStatus } : c
-		);
-		triggerToast(`Approved “${cert.name}” for ${cert.student}.`);
+	let acting = $state(false);
+
+	function setStatusLocally(cert: Certificate, status: CertStatus) {
+		certificates = certificates.map((c) => (c.id === cert.id ? { ...c, status } : c));
 	}
 
-	function rejectCert(cert: Certificate) {
-		certificates = certificates.map((c) =>
-			c.id === cert.id ? { ...c, status: 'Rejected' as CertStatus } : c
+	async function approveCert(cert: Certificate) {
+		if (acting) return;
+		acting = true;
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/approve`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${adminToken()}` }
+			});
+			const data = await readJson(res);
+			if (!res.ok) throw new Error(String(data.error || 'Approval failed'));
+			setStatusLocally(cert, 'Approved');
+			triggerToast(`Approved “${cert.name}” for ${cert.student}.`);
+		} catch (err) {
+			triggerToast(err instanceof Error ? err.message : 'Approval failed.', 'danger');
+		} finally {
+			acting = false;
+		}
+	}
+
+	async function rejectCert(cert: Certificate) {
+		if (acting) return;
+		const reason = window.prompt(
+			`Reason for rejecting “${cert.name}” (shown to the student so they can re-upload):`
 		);
-		triggerToast(`Rejected “${cert.name}” for ${cert.student}.`, 'danger');
+		if (reason === null) return; // cancelled
+		if (reason.trim() === '') {
+			triggerToast('A rejection reason is required.', 'danger');
+			return;
+		}
+		acting = true;
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/reject`, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${adminToken()}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ reason: reason.trim() })
+			});
+			const data = await readJson(res);
+			if (!res.ok) throw new Error(String(data.error || 'Rejection failed'));
+			setStatusLocally(cert, 'Rejected');
+			triggerToast(`Rejected “${cert.name}” for ${cert.student}.`, 'danger');
+		} catch (err) {
+			triggerToast(err instanceof Error ? err.message : 'Rejection failed.', 'danger');
+		} finally {
+			acting = false;
+		}
+	}
+
+	async function downloadCert(cert: Certificate) {
+		try {
+			await downloadAuthedFile(
+				`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/file`,
+				adminToken(),
+				`${cert.name}.pdf`
+			);
+			triggerToast(`Downloaded “${cert.name}”.`);
+		} catch (err) {
+			triggerToast(err instanceof Error ? err.message : 'Download failed.', 'danger');
+		}
 	}
 
 	// ── Recent Verification Activity (static log) ────────────────────────────────
@@ -651,7 +595,22 @@
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-slate-100 text-xs font-sans">
-				{#if pagedCertificates.length === 0}
+				{#if loading}
+					<tr>
+						<td colspan="7" class="py-16 text-center text-slate-400 font-semibold text-xs">
+							Loading certificates…
+						</td>
+					</tr>
+				{:else if loadError}
+					<tr>
+						<td colspan="7" class="py-16 text-center text-red-500 font-semibold text-xs">
+							{loadError}
+							<button onclick={loadCertificates} class="ml-2 underline hover:text-red-700"
+								>Retry</button
+							>
+						</td>
+					</tr>
+				{:else if pagedCertificates.length === 0}
 					<tr>
 						<td colspan="7" class="py-16 text-center text-slate-400 font-semibold text-xs">
 							No certificates match your filters.
@@ -876,7 +835,7 @@
 					<span class="text-[10px] font-semibold text-slate-400">{selectedCert.student}</span>
 				</div>
 				<button
-					onclick={() => triggerToast(`Opening full certificate for ${selectedCert.student}...`)}
+					onclick={() => downloadCert(selectedCert)}
 					class="w-full inline-flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
 				>
 					<svg
@@ -1014,7 +973,7 @@
 						Reject Certificate
 					</button>
 					<button
-						onclick={() => triggerToast(`Downloading certificate ${selectedCert.id}...`)}
+						onclick={() => downloadCert(selectedCert)}
 						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
 					>
 						<svg

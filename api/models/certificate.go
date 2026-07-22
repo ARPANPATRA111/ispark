@@ -24,6 +24,8 @@ type Certificate struct {
 	Credits           int            `gorm:"default:0" json:"credits"`
 	Status            string         `gorm:"type:varchar(50);default:'Pending'" json:"status"` // Pending, Approved, Rejected
 	RejectionReason   string         `gorm:"type:text" json:"rejection_reason"`
+	ReviewedBy        string         `gorm:"type:varchar(50)" json:"reviewed_by"` // admin_id of the reviewer
+	ReviewedAt        *time.Time     `json:"reviewed_at"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`

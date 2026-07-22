@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { API_BASE_URL } from '$lib/config';
+	import { downloadAuthedFile } from '$lib/api';
 
 	// ── Types (structural match with AdminStudentManagementView's Student) ──────
 	type Status = 'Active' | 'At Risk' | 'Pending Review' | 'Inactive';
@@ -58,6 +60,24 @@
 		onBack: () => void;
 		onToast?: (message: string, type?: 'success' | 'danger') => void;
 	} = $props();
+
+	async function viewCertificate(cert: Certificate) {
+		const token = localStorage.getItem('admin_token');
+		if (!token) {
+			toast('Your session has expired. Please sign in again.', 'danger');
+			return;
+		}
+		try {
+			await downloadAuthedFile(
+				`${API_BASE_URL}/api/admin/certificates/${cert.id}/file`,
+				token,
+				`${cert.name}.pdf`
+			);
+			toast(`Downloaded “${cert.name}”.`);
+		} catch (err) {
+			toast(err instanceof Error ? err.message : 'Could not open the certificate.', 'danger');
+		}
+	}
 
 	function toast(message: string, type: 'success' | 'danger' = 'success') {
 		onToast?.(message, type);
@@ -695,7 +715,7 @@
 								</td>
 								<td class="py-3.5 px-5 text-center">
 									<button
-										onclick={() => toast(`Opening certificate “${cert.name}”`)}
+										onclick={() => viewCertificate(cert)}
 										class="text-[11px] font-bold text-inst-navy hover:underline"
 									>
 										View
