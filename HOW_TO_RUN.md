@@ -255,7 +255,7 @@ Connection summary (session pooler, IPv4): host `aws-<n>-<region>.pooler.supabas
 
 | Piece        | URL                                                    |
 | ------------ | ------------------------------------------------------ |
-| Web (Vercel) | <https://ispark-roan.vercel.app>                       |
+| Web (Vercel) | <https://ispark-iips.vercel.app>                       |
 | API (Render) | <https://ispark-api.onrender.com> — health: `/health` |
 | Database     | Supabase `ispark-render` (Mumbai)                      |
 | Files        | Vercel Blob, private store `ispark-certificates`       |
@@ -333,7 +333,7 @@ The Render CLI is **not required at all** (it's mostly for log tailing/SSH anywa
 
 ### 6.3 Vercel (web) — DEPLOYED ✔
 
-Live at **<https://ispark-roan.vercel.app>** (project `ispark`, scope `arpanpatra111s-projects`, CLI deploy from local files — no GitHub connection, so you can still wire up the git-based deployment from branch `local-validation` in the dashboard whenever you want; the project and env vars are already there).
+Live at **<https://ispark-iips.vercel.app>** (project `ispark`, scope `arpanpatra111s-projects`, CLI deploy from local files — no GitHub connection, so you can still wire up the git-based deployment from branch `local-validation` in the dashboard whenever you want; the project and env vars are already there).
 
 Project env vars already set: `PUBLIC_API_BASE_URL` (`https://ispark-api.onrender.com` for production/preview, localhost for development) and `BLOB_READ_WRITE_TOKEN` (all environments). If Render assigns a different URL than `ispark-api.onrender.com`, update the env and redeploy:
 

@@ -2,7 +2,7 @@
 
 Purpose: human validation of everything the automated checks cannot see (visual state, UX flows, browser behavior, real email, deployed infra). Each numbered section below is independently assignable to one contributor. Fill in the **Tester** line, tick the checkboxes, and record any failure with steps + screenshot in the *Findings* line of that section.
 
-**Test environment — LIVE.** Web: **<https://ispark-roan.vercel.app>** · API: **<https://ispark-api.onrender.com>** (health check: `/health`). Or run locally per `HOW_TO_RUN.md`.
+**Test environment — LIVE.** Web: **<https://ispark-iips.vercel.app>** · API: **<https://ispark-api.onrender.com>** (health check: `/health`). Or run locally per `HOW_TO_RUN.md`.
 
 > **First request of the day is slow.** The API sleeps after ~15 minutes of inactivity on Render's free plan, so the first login can take up to a minute while it wakes. That is expected — not a bug. Please don't file it.
 
