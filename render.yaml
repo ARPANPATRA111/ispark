@@ -41,8 +41,18 @@ services:
         generateValue: true
 
       # --- CORS: the deployed web origin(s), comma-separated ---
+      # Must list every origin the browser loads the site from. If the Vercel
+      # project is renamed or a domain is added, add it here or the browser
+      # blocks all API calls (symptom: captcha never loads, no data appears).
       - key: ALLOWED_ORIGINS
-        value: https://ispark-roan.vercel.app
+        value: https://ispark-iips.vercel.app,https://ispark-roan.vercel.app
+      # Optional: also allow this project's per-deployment preview URLs, which
+      # look like ispark-<hash>-<account>-projects.vercel.app. The account
+      # segment is included deliberately: a pattern such as
+      # "^https://ispark-[a-z0-9-]+\.vercel\.app$" would also match a bare
+      # "ispark-anything.vercel.app" that someone else could register.
+      - key: ALLOWED_ORIGIN_REGEX
+        value: ^https://ispark-[a-z0-9]+-arpanpatra111s-projects\.vercel\.app$
 
       # --- Vercel Blob (private store ispark-certificates) ---
       - key: BLOB_READ_WRITE_TOKEN

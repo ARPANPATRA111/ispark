@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -41,18 +43,42 @@ func main() {
 	app.Use(recover.New()) // Recovers from panics to keep app running
 	app.Use(logger.New())  // Logs HTTP request details
 
-	// Setup CORS. ALLOWED_ORIGINS extends the local defaults with deployed
-	// web origins (comma-separated), e.g. https://ispark-test.vercel.app
+	// Setup CORS. ALLOWED_ORIGINS extends the local defaults with deployed web
+	// origins (comma-separated), e.g. https://ispark-iips.vercel.app.
+	//
+	// A browser silently drops every API response when the origin is missing
+	// here, which looks like "the captcha won't load and no data appears" —
+	// so the effective list is logged at startup to make that diagnosable.
 	allowOrigins := "http://localhost:5173, http://localhost:3000, http://127.0.0.1:5173, http://127.0.0.1:3000"
-	if extra := os.Getenv("ALLOWED_ORIGINS"); extra != "" {
+	if extra := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS")); extra != "" {
 		allowOrigins = allowOrigins + ", " + extra
 	}
-	app.Use(cors.New(cors.Config{
+	log.Printf("CORS allowed origins: %s", allowOrigins)
+
+	corsConfig := cors.Config{
 		AllowOrigins:     allowOrigins,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
-	}))
+	}
+
+	// Optional: ALLOWED_ORIGIN_REGEX additionally permits origins matching a
+	// pattern, so per-deployment preview URLs keep working without editing the
+	// list on every deploy. Keep it tightly anchored to your own project —
+	// a broad pattern such as ".*\.vercel\.app$" would let any site on that
+	// host make credentialed requests to this API.
+	if pattern := strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN_REGEX")); pattern != "" {
+		if re, err := regexp.Compile(pattern); err != nil {
+			log.Printf("Ignoring invalid ALLOWED_ORIGIN_REGEX %q: %v", pattern, err)
+		} else {
+			log.Printf("CORS also allowing origins matching: %s", pattern)
+			corsConfig.AllowOriginsFunc = func(origin string) bool {
+				return re.MatchString(origin)
+			}
+		}
+	}
+
+	app.Use(cors.New(corsConfig))
 
 	// Liveness probe for Render health checks and uptime monitors.
 	// Deliberately DB-free so a paused free-tier database doesn't flap it.

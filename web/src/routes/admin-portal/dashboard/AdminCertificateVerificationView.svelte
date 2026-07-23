@@ -2,7 +2,7 @@
 	import { slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { API_BASE_URL } from '$lib/config';
-	import { readJson, downloadAuthedFile } from '$lib/api';
+	import { readJson, downloadAuthedFile, refreshOnFocus } from '$lib/api';
 
 	// ── Types ──────────────────────────────────────────────────────────────────
 	type CertStatus = 'Pending' | 'Approved' | 'Rejected';
@@ -92,7 +92,12 @@
 		}
 	}
 
-	onMount(loadCertificates);
+	onMount(() => {
+		loadCertificates();
+		// Pick up reviews made in another tab/by another admin without a manual
+		// reload, but only when this tab is actually being looked at.
+		return refreshOnFocus(loadCertificates);
+	});
 
 	// ── Derived Stats ──────────────────────────────────────────────────────────
 	const pendingCount = $derived(certificates.filter((c) => c.status === 'Pending').length);

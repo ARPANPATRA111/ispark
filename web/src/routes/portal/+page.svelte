@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
 	import { API_BASE_URL } from '$lib/config';
+	import { refreshOnFocus } from '$lib/api';
 	import ProfileSection from './ProfileSection.svelte';
 	import BrowseActivities from './BrowseActivities.svelte';
 	import LeaderboardSection from './LeaderboardSection.svelte';
@@ -217,6 +219,10 @@
 	$effect(() => {
 		loadDashboardData();
 	});
+
+	// Refresh when the student comes back to the tab, so an admin's approval
+	// (or an upload made elsewhere) shows up without a manual reload.
+	onMount(() => refreshOnFocus(loadDashboardData));
 
 	// Certificate upload simulation state
 	let isUploadModalOpen = $state(false);
