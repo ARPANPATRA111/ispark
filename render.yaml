@@ -72,8 +72,14 @@ services:
       # SMTP_SENDER must be an address verified in Brevo.
       - key: BREVO_API_KEY
         sync: false
+      # The "from" address. NOT a secret (it appears in every email header), so
+      # it is set here rather than in the dashboard — a wrong value is the most
+      # common cause of silent delivery failure.
+      # It MUST be verified in Brevo (Senders, Domains & Dedicated IPs ->
+      # Senders), otherwise Brevo accepts the API call with 201 and then
+      # rejects delivery: "the sender you used ... is not valid".
       - key: SMTP_SENDER
-        sync: false
+        value: prafullapatra1234@gmail.com
       - key: SMTP_HOST
         value: smtp-relay.brevo.com
       - key: SMTP_PORT

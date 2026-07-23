@@ -107,6 +107,40 @@
 		fetchCaptcha();
 	});
 
+	// ── Account verification (unverified account signing in) ───────────────────
+	let needsVerification = $state(false);
+	let verifyEmail = $state('');
+	let verifyCode = $state('');
+
+	async function handleVerifySubmit(event: SubmitEvent) {
+		event.preventDefault();
+		if (verifyCode.trim() === '') return;
+
+		submitting = true;
+		errorMsg = '';
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: verifyEmail, code: verifyCode.trim() })
+			});
+			const data = await readJson(response);
+			if (!response.ok) {
+				throw new Error(String(data.error || 'Invalid or expired code'));
+			}
+			if (data.access_token) {
+				localStorage.setItem('access_token', String(data.access_token));
+			}
+			needsVerification = false;
+			loginSuccess = true;
+			setTimeout(() => goto('/portal'), 1200);
+		} catch (err) {
+			errorMsg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
+		} finally {
+			submitting = false;
+		}
+	}
+
 	// Submit Handler
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
@@ -130,6 +164,17 @@
 			});
 
 			const data = await readJson(response);
+
+			// 403 means the account exists but was never verified. The API has
+			// just emailed a fresh 6-digit code, so show the entry box here
+			// instead of leaving the user with a message and nowhere to type it.
+			if (response.status === 403 && data.email) {
+				verifyEmail = String(data.email);
+				needsVerification = true;
+				verifyCode = '';
+				errorMsg = '';
+				return;
+			}
 
 			if (!response.ok) {
 				throw new Error(String(data.error || 'Invalid credentials'));
@@ -375,6 +420,75 @@
 					</a>
 				</div>
 			</div>
+		{:else if needsVerification}
+			<!-- Account verification: the account exists but was never verified,
+			     and the API has just emailed a fresh 6-digit code. -->
+			<div class="p-6 sm:p-8 border-b border-border-base bg-slate-50/50">
+				<div class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+					STUDENT PORTAL
+				</div>
+				<h2 class="text-2xl font-bold text-inst-navy font-serif leading-tight mt-1">
+					Verify Your Email
+				</h2>
+				<p class="text-slate-500 text-xs mt-1">
+					This account has not been verified yet. We have emailed a 6-digit verification code to
+					<span class="font-semibold text-slate-700">{verifyEmail}</span>. Enter it below — there is
+					no link to click.
+				</p>
+			</div>
+
+			<form onsubmit={handleVerifySubmit} class="p-6 sm:p-8 flex flex-col gap-6">
+				{#if errorMsg}
+					<div
+						class="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg"
+					>
+						{errorMsg}
+					</div>
+				{/if}
+
+				<div class="flex flex-col gap-2">
+					<label
+						for="{formId}-verify-otp"
+						class="text-[11px] font-bold text-slate-700 tracking-wider"
+					>
+						VERIFICATION CODE (OTP)
+					</label>
+					<input
+						id="{formId}-verify-otp"
+						type="text"
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						maxlength="6"
+						bind:value={verifyCode}
+						placeholder="Enter the 6-digit code"
+						class="w-full px-4 py-3 border border-border-base rounded-lg text-sm tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-inst-navy/20 focus:border-inst-navy"
+					/>
+					<p class="text-[10px] text-slate-400">
+						The code expires in 15 minutes. Check your spam folder if it has not arrived.
+					</p>
+				</div>
+
+				<div class="flex items-center gap-3">
+					<button
+						type="submit"
+						disabled={submitting || verifyCode.trim() === ''}
+						class="flex-1 py-3 bg-inst-navy text-white text-xs font-bold rounded-lg hover:bg-inst-navy/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						{submitting ? 'Verifying…' : 'Verify and Continue'}
+					</button>
+					<button
+						type="button"
+						onclick={() => {
+							needsVerification = false;
+							errorMsg = '';
+							fetchCaptcha();
+						}}
+						class="px-4 py-3 text-xs font-bold text-slate-500 border border-border-base rounded-lg hover:bg-slate-50 transition-colors"
+					>
+						Back
+					</button>
+				</div>
+			</form>
 		{:else if viewState === 'forgot'}
 			<!-- Forgot Password View -->
 			<div class="p-6 sm:p-8 border-b border-border-base bg-slate-50/50">

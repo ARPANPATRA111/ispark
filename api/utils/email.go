@@ -72,7 +72,10 @@ func SendOTP(toEmail, otpCode, purpose string) error {
 			logEmailFallback(toEmail, subject, body)
 			return nil
 		}
-		log.Printf("OTP email sent to %s via the Brevo API", toEmail)
+		// Accepted, not necessarily delivered: Brevo returns 201 and only then
+		// rejects asynchronously if SMTP_SENDER is not a verified sender. The
+		// sender is logged so that failure mode is obvious from the logs alone.
+		log.Printf("OTP email for %s accepted by Brevo (from %s). If it never arrives, confirm this sender is verified in Brevo.", toEmail, sender)
 		return nil
 	}
 
