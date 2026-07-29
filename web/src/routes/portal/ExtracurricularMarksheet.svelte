@@ -240,7 +240,7 @@
 
 	<!-- Marksheet Card Container -->
 	<article
-		class="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm max-w-4xl mx-auto w-full marksheet-card relative overflow-hidden"
+		class="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm max-w-4xl mx-auto w-full marksheet-card printable-document relative overflow-hidden"
 	>
 		<!-- Transcript Blue Header Bar -->
 		<header
@@ -563,35 +563,15 @@
 </div>
 
 <style>
-	/* Print specific media styling */
+	/* The shared print rules live in routes/layout.css (.printable-document), so
+	   every printable view behaves the same. Only marksheet-specific tweaks
+	   belong here. */
 	@media print {
-		/* Force margins and layout container rules */
-		:global(aside),
-		:global(header),
-		.no-print {
-			display: none !important;
-		}
-
-		:global(main) {
-			padding: 0 !important;
-			margin: 0 !important;
-			background: white !important;
-			width: 100% !important;
-			max-width: 100% !important;
-		}
-
-		:global(body) {
-			background-color: white !important;
-			color: black !important;
-		}
-
+		/* The card clips its decorative header on screen; clipping during print
+		   would cut the document off at the first page boundary. */
 		.marksheet-card {
-			border: none !important;
-			box-shadow: none !important;
+			overflow: visible !important;
 			padding: 0 !important;
-			margin: 0 !important;
-			width: 100% !important;
-			max-width: 100% !important;
 		}
 	}
 </style>

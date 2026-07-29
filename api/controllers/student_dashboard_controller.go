@@ -303,6 +303,30 @@ func getCurrentAcademicYearRange() (time.Time, time.Time) {
 	return startDate, endDate
 }
 
+// currentAcademicYearLabel formats the running academic year as "2026-27",
+// matching the July-June range used everywhere else. Returned to the client so
+// no screen has to hardcode the year.
+func currentAcademicYearLabel() string {
+	start, _ := getCurrentAcademicYearRange()
+	return fmt.Sprintf("%d-%02d", start.Year(), (start.Year()+1)%100)
+}
+
+// defaultTargetCredits is the graduation credit requirement used when the
+// platform setting is absent. The real figure is an open policy decision, so it
+// is overridable from System Settings (key "graduation_target_credits") rather
+// than being fixed in code.
+const defaultTargetCredits = 200
+
+func targetCreditsSetting() int {
+	var setting models.SystemSetting
+	if err := config.DB.Where("key = ?", "graduation_target_credits").First(&setting).Error; err == nil {
+		if parsed, convErr := strconv.Atoi(strings.TrimSpace(setting.Value)); convErr == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return defaultTargetCredits
+}
+
 // GetLeaderboard returns the leaderboard sorted by total credits for a given academic year
 func GetLeaderboard(c *fiber.Ctx) error {
 	rollNo := c.Locals("roll_no").(string)
@@ -828,6 +852,7 @@ type MarksheetResponse struct {
 	SemesterSummary          []SemesterSummaryEntry   `json:"semester_summary"`
 	FinalGrade               string                   `json:"final_grade"`
 	TargetCredits            int                      `json:"target_credits"`
+	AcademicYear             string                   `json:"academic_year"`
 	CreditsNeededToNextGrade int                      `json:"credits_needed_to_next_grade"`
 	NextGrade                string                   `json:"next_grade"`
 	GradeScales              []fiber.Map              `json:"grade_scales"`
@@ -1039,7 +1064,8 @@ func GetMarksheet(c *fiber.Ctx) error {
 		TotalContribution:        contributionStr,
 		SemesterSummary:          semesterSummary,
 		FinalGrade:               finalGrade,
-		TargetCredits:            200,
+		TargetCredits:            targetCreditsSetting(),
+		AcademicYear:             currentAcademicYearLabel(),
 		CreditsNeededToNextGrade: neededToNext,
 		NextGrade:                nextGrade,
 		GradeScales:              scales,

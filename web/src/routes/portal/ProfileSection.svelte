@@ -33,6 +33,17 @@
 		lastPasswordChange: '-'
 	});
 
+	// Avatar fallback: the student's own initials rather than a fixed placeholder.
+	const initials = $derived(
+		(profile.name || '')
+			.split(' ')
+			.filter(Boolean)
+			.slice(0, 2)
+			.map((part) => part[0])
+			.join('')
+			.toUpperCase() || 'S'
+	);
+
 	async function loadProfile() {
 		try {
 			const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
@@ -220,10 +231,10 @@
 			if (res.ok) {
 				const data = await res.json();
 				profile.dob = data.student.dob || '-';
-				if (!profile.photoUrl) {
-					profile.photoUrl =
-						'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=120'; // Mock avatar
-				}
+				// No placeholder photo: the profile-completeness panel reports a
+				// missing photo, so substituting a stock image both misrepresents
+				// the student and contradicts that indicator. Initials are shown
+				// instead until a real photo upload exists.
 			}
 		} catch (e) {
 			console.error(e);
@@ -248,7 +259,7 @@
 				{#if profile.photoUrl}
 					<img src={profile.photoUrl} alt={profile.name} class="w-full h-full object-cover" />
 				{:else}
-					RV
+					{initials}
 				{/if}
 			</div>
 

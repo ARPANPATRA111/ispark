@@ -158,7 +158,7 @@ go test -count=1 ./...       # unit tests run on in-memory SQLite, no DB needed
 golangci-lint run ./...      # CI uses v2.12.1
 ```
 
-All of the above pass on this branch as of 2026-07-22 (see `test.md` §0 for the recorded results).
+All of the above pass on this branch as of 2026-07-22 (see `TESTING.md` for the manual suite).
 
 ### Automated API regression suite
 
@@ -184,7 +184,7 @@ git diff                         # review content
 
 # stage everything on this branch: docs, regression suite, storage layer,
 # deployment env support, adapter switch, compose pgadmin opt-in, Render blueprint
-git add HOW_TO_RUN.md test.md .gitignore docker-compose.yml render.yaml `
+git add HOW_TO_RUN.md TESTING.md .gitignore docker-compose.yml render.yaml `
   scripts/api-regression.mjs `
   api/storage/ api/main.go api/config/database.go api/config/seed.go `
   api/controllers/student_dashboard_controller.go api/.env.example `
@@ -201,7 +201,7 @@ To later open a PR against upstream:
 ```powershell
 gh pr create --repo iips-oss/ispark --base main --head ARPANPATRA111:local-validation `
   --title "Validation: run guide, manual test plan, API regression suite" `
-  --body "Adds HOW_TO_RUN.md, test.md (manual regression plan), and scripts/api-regression.mjs (63 automated API checks)."
+  --body "Adds HOW_TO_RUN.md, TESTING.md (manual test suite), and scripts/api-regression.mjs (63 automated API checks)."
 ```
 
 To keep the branch synced with upstream while it lives on the fork:
@@ -386,7 +386,7 @@ root/
 ├── docker-compose.yml   web:3000 api:8080 db:5432 (pgadmin opt-in: --profile tools)
 ├── render.yaml          Render Blueprint — dashboard-based API deploy, no CLI needed
 ├── HOW_TO_RUN.md        this file
-└── test.md              manual test plan (assign sections to contributors)
+└── TESTING.md            manual test suite (12 suites, assign one per contributor)
 ```
 
 Docker hygiene: only the `db` container is required for development (`docker compose up -d db`). pgAdmin is behind the `tools` profile so it is never pulled by default. When you are done working: `docker compose stop`. To reclaim space periodically: `docker builder prune` and `docker volume prune` (never `--all`, and never prune named volumes — they hold database data).

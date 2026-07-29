@@ -98,7 +98,13 @@
 			return;
 		}
 
-		await Promise.all([loadPlatformData(), loadSettings(), loadReportsData()]);
+		await Promise.all([
+			loadPlatformData(),
+			loadSettings(),
+			loadReportsData(),
+			loadNotifications(),
+			loadRecentLogs()
+		]);
 	});
 
 	// Sidebar menu items list for Super Admin Portal
@@ -141,27 +147,74 @@
 	let isNotificationsOpen = $state(false);
 	let searchQuery = $state('');
 
-	// Mock Notifications for Super Admin
-	const notifications = [
-		{
-			id: 1,
-			text: 'System health warning: Background DB sync delayed by 3m.',
-			time: '15 mins ago',
-			unread: true
-		},
-		{
-			id: 2,
-			text: 'Security Alert: Failed SSH attempt from 192.168.1.104.',
-			time: '1 hour ago',
-			unread: true
-		},
-		{
-			id: 3,
-			text: 'Daily audit backup successfully uploaded to S3.',
-			time: '6 hours ago',
-			unread: false
+	// Notifications describe the real state of the platform. The previous fixed
+	// list invented infrastructure events (SSH attempts, S3 backups) for systems
+	// this project does not run, which is actively misleading during testing.
+	interface Notice {
+		id: number;
+		text: string;
+		time: string;
+		unread: boolean;
+	}
+
+	let notifications = $state<Notice[]>([]);
+
+	async function loadNotifications() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		const auth = { Authorization: `Bearer ${token}` };
+		const notices: Notice[] = [];
+
+		try {
+			const [certRes, unverifiedRes] = await Promise.all([
+				fetch(`${API_BASE_URL}/api/admin/certificates?status=Pending`, { headers: auth }),
+				fetch(`${API_BASE_URL}/api/admin/platform/users`, { headers: auth })
+			]);
+
+			if (certRes.ok) {
+				const data = await certRes.json();
+				const pending = (data.certificates ?? []).filter(
+					(c: { status?: string }) => c.status === 'Pending'
+				);
+				if (pending.length > 0) {
+					notices.push({
+						id: 1,
+						text: `${pending.length} certificate${pending.length === 1 ? '' : 's'} pending review across all batches.`,
+						time: 'Updated just now',
+						unread: true
+					});
+				}
+			}
+
+			if (unverifiedRes.ok) {
+				const data = await unverifiedRes.json();
+				const unverified = (data.users ?? []).filter(
+					(u: { status?: string; role?: string }) =>
+						u.role === 'Student' && u.status && u.status !== 'Active'
+				);
+				if (unverified.length > 0) {
+					notices.push({
+						id: 2,
+						text: `${unverified.length} student account${unverified.length === 1 ? '' : 's'} not yet verified.`,
+						time: 'Updated just now',
+						unread: true
+					});
+				}
+			}
+		} catch {
+			// The panel simply stays empty rather than reporting a failure.
 		}
-	];
+
+		if (notices.length === 0) {
+			notices.push({
+				id: 0,
+				text: 'No items need attention right now.',
+				time: '',
+				unread: false
+			});
+		}
+		notifications = notices;
+	}
 
 	// Users come from the API. recentUsers is just the newest slice of the same
 	// registry, so the two can never drift apart.
@@ -201,51 +254,44 @@
 		userRegistry.length > 0 ? ((activeUsersCount / userRegistry.length) * 100).toFixed(1) : '0.0'
 	);
 
-	// Mock Recent System Activities (Step 5)
-	let recentLogs = $state([
-		{
-			activity: 'New student account created',
-			type: 'User Added',
-			performedBy: 'Super Admin',
-			date: 'Jun 27, 2026',
-			status: 'Completed'
-		},
-		{
-			activity: 'Activity "Blood Donation Camp" published',
-			type: 'Activity Created',
-			performedBy: 'Super Admin',
-			date: 'Jun 25, 2026',
-			status: 'Completed'
-		},
-		{
-			activity: 'Track "Interdisciplinary" updated',
-			type: 'Track Updated',
-			performedBy: 'Super Admin',
-			date: 'Jun 24, 2026',
-			status: 'Completed'
-		},
-		{
-			activity: 'Platform-wide announcement published',
-			type: 'Announcement',
-			performedBy: 'Super Admin',
-			date: 'Jun 22, 2026',
-			status: 'Completed'
-		},
-		{
-			activity: 'Monthly activity report generated',
-			type: 'Report',
-			performedBy: 'Super Admin',
-			date: 'Jun 20, 2026',
-			status: 'Completed'
-		},
-		{
-			activity: 'Admin assigned to Data Science track',
-			type: 'Track Updated',
-			performedBy: 'Super Admin',
-			date: 'Jun 18, 2026',
-			status: 'Completed'
+	// Recent system activity. Seeded from the server-side audit log so the panel
+	// reflects real history, then prepended to locally as the super admin acts.
+	interface SystemLog {
+		activity: string;
+		type: string;
+		performedBy: string;
+		date: string;
+		status: string;
+	}
+
+	let recentLogs = $state<SystemLog[]>([]);
+
+	async function loadRecentLogs() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/reports/audit?limit=10`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (!res.ok) return;
+			const data = await res.json();
+			recentLogs = (data.logs ?? []).map((entry: Record<string, string>) => ({
+				activity: entry.action ?? '—',
+				type: entry.category ?? 'System',
+				performedBy: entry.user || 'System',
+				date: entry.created_at
+					? new Date(entry.created_at).toLocaleDateString('en-GB', {
+							day: '2-digit',
+							month: 'short',
+							year: 'numeric'
+						})
+					: '',
+				status: 'Completed'
+			}));
+		} catch {
+			// Leave the panel empty rather than showing invented activity.
 		}
-	]);
+	}
 
 	// Action modals states (Step 6)
 	let isCreateUserModalOpen = $state(false);

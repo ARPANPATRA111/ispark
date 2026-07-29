@@ -37,3 +37,92 @@ body {
 	margin: 0;
 	padding: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Print / "Download PDF"
+   ---------------------------------------------------------------------------
+   The portal renders inside a sidebar layout whose <main> is a scroll
+   container. Browsers print only the visible part of a scrolling box, which is
+   why the exported marksheet used to come out blank or cut off after the first
+   page. Backgrounds and colours are also dropped by default, which is what made
+   the output look plain next to the on-screen design.
+
+   These rules unwind the app chrome for print, force scrollable regions to
+   expand to their full height, and keep the document's colours. Anything the
+   printed document should not contain is marked .no-print in the component. */
+
+@media print {
+	@page {
+		size: A4;
+		margin: 12mm;
+	}
+
+	/* Keep the design's colours instead of the browser's default
+	   ink-saving pass, which strips every background and border tint. */
+	*,
+	*::before,
+	*::after {
+		-webkit-print-color-adjust: exact !important;
+		print-color-adjust: exact !important;
+	}
+
+	html,
+	body {
+		background: #fff !important;
+		width: 100% !important;
+		height: auto !important;
+		overflow: visible !important;
+	}
+
+	/* App chrome never belongs in the exported document. */
+	.no-print,
+	aside,
+	nav {
+		display: none !important;
+	}
+
+	/* Expand every scroll/height-constrained wrapper so the whole document
+	   flows onto as many pages as it needs. */
+	main,
+	main > *,
+	.printable-document,
+	.printable-document * {
+		max-height: none !important;
+		height: auto !important;
+		overflow: visible !important;
+	}
+
+	main {
+		display: block !important;
+		padding: 0 !important;
+		margin: 0 !important;
+		max-width: 100% !important;
+		width: 100% !important;
+	}
+
+	/* Position the document at the top of the page rather than wherever it
+	   happened to sit in the flex layout. */
+	.printable-document {
+		position: static !important;
+		margin: 0 !important;
+		border: none !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+		max-width: 100% !important;
+		width: 100% !important;
+	}
+
+	/* Do not split a row, card or signature block across two pages. */
+	table,
+	thead,
+	tbody,
+	tr,
+	.avoid-break {
+		break-inside: avoid !important;
+		page-break-inside: avoid !important;
+	}
+
+	thead {
+		display: table-header-group !important;
+	}
+}

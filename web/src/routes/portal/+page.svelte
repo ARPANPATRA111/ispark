@@ -90,9 +90,31 @@
 	let leaderboard = $state<any[]>([]);
 	let loading = $state(true);
 
+	// Graduation target and academic year come from the marksheet endpoint so the
+	// dashboard matches Credits & Progress and neither hardcodes an open policy
+	// decision. The fallbacks only apply until that request completes.
+	let targetCredits = $state(200);
+	let academicYear = $state('');
+
+	async function loadMarksheetPolicy() {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/student/marksheet`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (!res.ok) return;
+			const data = await res.json();
+			if (data.target_credits) targetCredits = data.target_credits;
+			if (data.academic_year) academicYear = data.academic_year;
+		} catch {
+			// Keep the defaults; the dashboard still renders.
+		}
+	}
+
 	// Derived percentage completion and values
-	let percentComplete = $derived(Math.min(Math.round((stats.credits_earned / 200) * 100), 100));
-	let remainingCredits = $derived(Math.max(200 - stats.credits_earned, 0));
+	let percentComplete = $derived(
+		Math.min(Math.round((stats.credits_earned / targetCredits) * 100), 100)
+	);
+	let remainingCredits = $derived(Math.max(targetCredits - stats.credits_earned, 0));
 	let approvedPct = $derived(
 		stats.certificates_uploaded > 0
 			? Math.round((stats.approved_certificates / stats.certificates_uploaded) * 100)
@@ -242,7 +264,10 @@
 
 	// Refresh when the student comes back to the tab, so an admin's approval
 	// (or an upload made elsewhere) shows up without a manual reload.
-	onMount(() => refreshOnFocus(loadDashboardData));
+	onMount(() => {
+		loadMarksheetPolicy();
+		return refreshOnFocus(loadDashboardData);
+	});
 
 	// Certificate upload simulation state
 	let isUploadModalOpen = $state(false);
@@ -653,7 +678,7 @@
 		<div class="flex-grow flex flex-col min-w-0">
 			<!-- Top Navigation Header -->
 			<header
-				class="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 sticky top-0 z-30"
+				class="no-print bg-white border-b border-slate-200 h-[72px] flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 sticky top-0 z-30"
 			>
 				<!-- Mobile sidebar toggle -->
 				<div class="flex items-center gap-3 min-w-0 flex-1">
@@ -1024,7 +1049,7 @@
 									<h2 class="text-base font-bold font-serif text-[#0B1535]">Credits Progress</h2>
 									<span
 										class="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest block mt-1"
-										>ACADEMIC YEAR 2025-26</span
+										>ACADEMIC YEAR {academicYear || '—'}</span
 									>
 								</div>
 								<span

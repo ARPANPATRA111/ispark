@@ -64,6 +64,8 @@
 		} finally {
 			loading = false;
 		}
+
+		loadNotifications();
 	});
 
 	function getInitials(name: string): string {
@@ -119,27 +121,71 @@
 	let isNotificationsOpen = $state(false);
 	let searchQuery = $state('');
 
-	// Mock Notifications for Administrator (Dr. Rajesh Kumar)
-	const notifications = [
-		{
-			id: 1,
-			text: 'New certificate submission from Arjun Mehta awaiting review.',
-			time: '1 hour ago',
-			unread: true
-		},
-		{
-			id: 2,
-			text: 'Priority Alert: 3 certificates are marked high priority.',
-			time: '4 hours ago',
-			unread: true
-		},
-		{
-			id: 3,
-			text: 'Monthly batch participation report ready for download.',
-			time: '1 day ago',
-			unread: false
+	// Notifications are derived from live data rather than a fixed list, so they
+	// always describe this admin's actual queue instead of inventing events.
+	interface Notice {
+		id: number;
+		text: string;
+		time: string;
+		unread: boolean;
+	}
+
+	let notifications = $state<Notice[]>([]);
+
+	async function loadNotifications() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		const auth = { Authorization: `Bearer ${token}` };
+		const notices: Notice[] = [];
+
+		try {
+			const [certRes, attentionRes] = await Promise.all([
+				fetch(`${API_BASE_URL}/api/admin/certificates/queue?status=Pending`, { headers: auth }),
+				fetch(`${API_BASE_URL}/api/admin/monitoring/attention-students`, { headers: auth })
+			]);
+
+			if (certRes.ok) {
+				const data = await certRes.json();
+				const pending = (data.certificates ?? []).filter(
+					(c: { status?: string }) => c.status === 'Pending'
+				);
+				if (pending.length > 0) {
+					notices.push({
+						id: 1,
+						text: `${pending.length} certificate${pending.length === 1 ? '' : 's'} awaiting your review.`,
+						time: 'Updated just now',
+						unread: true
+					});
+				}
+			}
+
+			if (attentionRes.ok) {
+				const data = await attentionRes.json();
+				const students = data.students ?? data.attention_students ?? [];
+				if (students.length > 0) {
+					notices.push({
+						id: 2,
+						text: `${students.length} student${students.length === 1 ? '' : 's'} in your batch need attention.`,
+						time: 'Updated just now',
+						unread: true
+					});
+				}
+			}
+		} catch {
+			// A notification panel is not worth surfacing an error for; leaving it
+			// empty shows the "You're all caught up" state instead.
 		}
-	];
+
+		if (notices.length === 0) {
+			notices.push({
+				id: 0,
+				text: "You're all caught up. No items need attention right now.",
+				time: '',
+				unread: false
+			});
+		}
+		notifications = notices;
+	}
 
 	function toggleMobileSidebar() {
 		isMobileSidebarOpen = !isMobileSidebarOpen;
