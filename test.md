@@ -33,19 +33,24 @@ Recorded 2026-07-22 on branch `local-validation` (`main` @ `06ebd7c`):
 
 The automated suite already covers API happy paths, auth failures, RBAC boundaries, batch scoping, file-type sniffing, and cross-student certificate access. **Human testing should focus on the UI wiring, visuals, and the flows below.**
 
-### ⚠ Views that are KNOWN mock/prototype (no backend exists yet — do not file bugs for fake data)
+### Feature status after the upstream merge
 
-| View                                                        | Upstream status                                                                                                  |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Admin → Dashboard stat cards                               | not wired (PR #88/#89 attempt open/closed)                                                                       |
-| Admin → Certificate Verification                           | **now wired** — lists real certificates, approve/reject persist, files download. Test it for real (section C4). |
-| Admin → Activity Monitoring                                | mock                                                                                                             |
-| Admin → Batch Analytics                                    | mock                                                                                                             |
-| Super admin → Activity Management                          | local-state only, changes vanish on refresh (API PR #91 open)                                                    |
-| Super admin → Reports Center                               | mock (API PR #98 open)                                                                                           |
-| Super admin dashboard sub-labels ("+32 this semester" etc.) | fabricated deltas on real numbers                                                                                |
+Upstream PRs #91, #98, #103, #106, #109 and #111 replaced almost every prototype with a real backend. All of these now serve live data and are **in scope for testing**:
 
-For these, the test is only: *page renders, doesn't crash, and is visibly a prototype*. Everything else in this plan is expected to be fully functional.
+| View                               | Status                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| Admin → Dashboard stat cards      | **wired** — real stats and recent activity                                |
+| Admin → Certificate Verification  | **wired** — queue, approve/reject persist, file downloads                 |
+| Admin → Activity Monitoring       | **wired** — stats, insights, students needing attention, reminder sending |
+| Admin → Batch Analytics           | **wired** — overview, per-batch detail, report export                     |
+| Admin → Student detail            | **wired** — mentor observations and notices                               |
+| Super admin → Activity Management | **wired** — activity CRUD now persists                                    |
+| Super admin → Track Management    | **wired** — routes restored during the merge (see note below)             |
+| Super admin → Reports Center      | **wired** — summary, templates, scheduling, export, audit log             |
+
+Still cosmetic, do not file bugs: the super-admin dashboard sub-labels ("+32 this semester" etc.) are fabricated deltas on otherwise real numbers.
+
+> **Merge note:** upstream shipped the track controller and its tests but not the routes, so Track Management and the track filter on Activity Management returned 404. The routes were restored on this branch. Worth reporting upstream — their own deployment has this bug.
 
 ---
 
