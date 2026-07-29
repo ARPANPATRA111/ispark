@@ -8,10 +8,10 @@ This is the full manual test suite for the iSPARC testing round. It is written f
 
 ## 1. Environment
 
-| | |
-| --- | --- |
-| Web | <https://ispark-iips.vercel.app> |
-| API | <https://ispark-api.onrender.com> |
+|          |                                            |
+| -------- | ------------------------------------------ |
+| Web      | <https://ispark-iips.vercel.app>           |
+| API      | <https://ispark-api.onrender.com>          |
 | Database | Supabase (shared — see the warning below) |
 
 > **The first request of the day is slow.** The API sleeps after ~15 minutes of inactivity and takes up to a minute to wake. A slow *first* login is expected and is **not a bug**. A slow *second* request is a bug — report it.
@@ -28,16 +28,16 @@ Between the whole team, every suite should be run at least once on each of: **Ch
 
 Every account below uses the password **`Pass@123`**.
 
-| Role | Login | Portal | Notes |
-| --- | --- | --- | --- |
-| Student | `rahul.sharma@iips.edu` | `/login` | IT2K24 |
-| Student | `sneha.kumar@iips.edu` | `/login` | IT2K24 |
-| Student | `arjun.desai@iips.edu` | `/login` | IT2K24 |
-| Student | `vikram.singh@iips.edu` | `/login` | IT2K24 — keep this one empty as a control |
-| Student | `priya.nair@iips.edu` | `/login` | IT2K25 — different batch |
-| Admin | `admin` | `/admin-portal` | Scoped to batch **IT2K24** |
-| Admin | `admin2` | `/admin-portal` | Scoped to batch **IT2K25** |
-| Super admin | `superadmin` | `/super-admin-portal` | Whole platform |
+| Role        | Login                   | Portal                | Notes                                      |
+| ----------- | ----------------------- | --------------------- | ------------------------------------------ |
+| Student     | `rahul.sharma@iips.edu` | `/login`              | IT2K24                                     |
+| Student     | `sneha.kumar@iips.edu`  | `/login`              | IT2K24                                     |
+| Student     | `arjun.desai@iips.edu`  | `/login`              | IT2K24                                     |
+| Student     | `vikram.singh@iips.edu` | `/login`              | IT2K24 — keep this one empty as a control |
+| Student     | `priya.nair@iips.edu`   | `/login`              | IT2K25 — different batch                  |
+| Admin       | `admin`                 | `/admin-portal`       | Scoped to batch **IT2K24**                 |
+| Admin       | `admin2`                | `/admin-portal`       | Scoped to batch **IT2K25**                 |
+| Super admin | `superadmin`            | `/super-admin-portal` | Whole platform                             |
 
 Each login page also has a collapsible **Dev: demo credentials** panel.
 
@@ -45,17 +45,17 @@ Each login page also has a collapsible **Dev: demo credentials** panel.
 
 The database was deliberately cleared before this round. **Only the accounts above exist.** There are no activities, tracks, certificates, enrolments or announcements — you create everything yourself, which is the point: it exercises the real product flow from zero and means no seeded data can mask a bug.
 
-| Entity | Count at start |
-| --- | --- |
-| Students | 8 (5 in IT2K24, 3 in IT2K25) |
-| Admins | 3 (2 batch admins + 1 super admin) |
-| Platform settings | 26 |
-| Activities, tracks, certificates, enrolments, announcements, reports | **0** |
+| Entity                                                               | Count at start                     |
+| -------------------------------------------------------------------- | ---------------------------------- |
+| Students                                                             | 8 (5 in IT2K24, 3 in IT2K25)       |
+| Admins                                                               | 3 (2 batch admins + 1 super admin) |
+| Platform settings                                                    | 26                                 |
+| Activities, tracks, certificates, enrolments, announcements, reports | **0**                              |
 
 Two consequences to expect, which are **not bugs**:
 
-- Every list starts empty. An empty state should be a friendly message, never a blank panel, a permanent spinner, or `undefined`/`NaN` — if you see those, that *is* a bug worth reporting.
-- Dashboards, leaderboards and analytics read zero until data exists.
+* Every list starts empty. An empty state should be a friendly message, never a blank panel, a permanent spinner, or `undefined`/`NaN` — if you see those, that *is* a bug worth reporting.
+* Dashboards, leaderboards and analytics read zero until data exists.
 
 ### Suite order matters
 
@@ -84,19 +84,19 @@ Log one row per finding in your suite's results table, and raise anything Critic
 
 ### Severity
 
-| Severity | Meaning | Examples |
-| --- | --- | --- |
+| Severity     | Meaning                                                       | Examples                                                                                    |
+| ------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **Critical** | Data loss, a security hole, or a core flow completely blocked | You can see another student's certificate; approvals silently do not save; login impossible |
-| **High** | A main feature is broken, no workaround | Upload always fails; marksheet exports blank |
-| **Medium** | Feature works but is wrong or awkward | A count is off by one; validation message is misleading |
-| **Low** | Cosmetic | Misalignment, typo, inconsistent capitalisation |
+| **High**     | A main feature is broken, no workaround                       | Upload always fails; marksheet exports blank                                                |
+| **Medium**   | Feature works but is wrong or awkward                         | A count is off by one; validation message is misleading                                     |
+| **Low**      | Cosmetic                                                      | Misalignment, typo, inconsistent capitalisation                                             |
 
 ### Please **do not** report these — they are known and accepted
 
-- Slow first request after idle (free-tier cold start).
-- The super-admin dashboard's small sub-labels ("+32 this semester") — known fabricated deltas, already on the fix list.
-- The yellow "Dev: demo credentials" panel on login pages — intentional for this round.
-- OTP emails landing in spam.
+* Slow first request after idle (free-tier cold start).
+* The super-admin dashboard's small sub-labels ("+32 this semester") — known fabricated deltas, already on the fix list.
+* The yellow "Dev: demo credentials" panel on login pages — intentional for this round.
+* OTP emails landing in spam.
 
 ---
 
@@ -104,20 +104,20 @@ Log one row per finding in your suite's results table, and raise anything Critic
 
 Twelve suites. One contributor per suite is ideal; S12 should be done by someone who has already finished another suite.
 
-| Suite | Area | Assigned to |
-| --- | --- | --- |
-| S1 | Public site & registration | |
-| S2 | Login, session & password recovery | |
-| S3 | Student — dashboard, activities, enrolments | |
-| S4 | Student — certificate upload & management | |
-| S5 | Student — credits, marksheet & PDF export | |
-| S6 | Student — leaderboard & profile | |
-| S7 | Admin — access, profile & student management | |
-| S8 | Admin — certificate verification (the credit loop) | |
-| S9 | Admin — activity monitoring & batch analytics | |
-| S10 | Super admin — users, activities & tracks | |
-| S11 | Super admin — announcements, settings & reports | |
-| S12 | Cross-cutting — security, responsive, resilience | |
+| Suite | Area                                                | Assigned to |
+| ----- | --------------------------------------------------- | ----------- |
+| S1    | Public site & registration                          |             |
+| S2    | Login, session & password recovery                  |             |
+| S3    | Student — dashboard, activities, enrolments        |             |
+| S4    | Student — certificate upload & management          |             |
+| S5    | Student — credits, marksheet & PDF export          |             |
+| S6    | Student — leaderboard & profile                    |             |
+| S7    | Admin — access, profile & student management       |             |
+| S8    | Admin — certificate verification (the credit loop) |             |
+| S9    | Admin — activity monitoring & batch analytics      |             |
+| S10   | Super admin — users, activities & tracks           |             |
+| S11   | Super admin — announcements, settings & reports    |             |
+| S12   | Cross-cutting — security, responsive, resilience   |             |
 
 ---
 
@@ -144,20 +144,20 @@ Twelve suites. One contributor per suite is ideal; S12 should be done by someone
 
 Each of these must be **rejected with a message that says what to fix**:
 
-| # | Input | Expected |
-| --- | --- | --- |
-| a | Email already registered (`rahul.sharma@iips.edu`) | Rejected, tells you the email is taken |
-| b | Roll number already used (`IT2K24011`) | Rejected |
-| c | Enrolment number already used | Rejected |
-| d | Password and confirm-password differ | Rejected before submit |
-| e | Weak password (`abc`) | Rejected, states the policy |
-| f | Malformed email (`test@`, `test.com`, `a b@c.com`) | Rejected |
-| g | Every field blank, press submit | Cannot submit; required fields marked |
-| h | Semester out of range (0, 15, negative, letters) | Rejected |
-| i | Contact number with letters, or 5 digits, or 20 digits | Rejected |
-| j | Leading/trailing spaces in email (` a@b.com `) | Either trimmed and accepted, or clearly rejected — **not** silently creating a duplicate account |
-| k | Very long name (200+ characters) | Either limited or handled without breaking layout |
-| l | Name with an accent or non-Latin script (`José`, `प्रिया`) | Accepted and displayed correctly afterwards |
+| #   | Input                                                      | Expected                                                                                          |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| a   | Email already registered (`rahul.sharma@iips.edu`)         | Rejected, tells you the email is taken                                                            |
+| b   | Roll number already used (`IT2K24011`)                     | Rejected                                                                                          |
+| c   | Enrolment number already used                              | Rejected                                                                                          |
+| d   | Password and confirm-password differ                       | Rejected before submit                                                                            |
+| e   | Weak password (`abc`)                                      | Rejected, states the policy                                                                       |
+| f   | Malformed email (`test@`, `test.com`, `a b@c.com`)         | Rejected                                                                                          |
+| g   | Every field blank, press submit                            | Cannot submit; required fields marked                                                             |
+| h   | Semester out of range (0, 15, negative, letters)           | Rejected                                                                                          |
+| i   | Contact number with letters, or 5 digits, or 20 digits     | Rejected                                                                                          |
+| j   | Leading/trailing spaces in email (` a@b.com `)             | Either trimmed and accepted, or clearly rejected — **not** silently creating a duplicate account |
+| k   | Very long name (200+ characters)                           | Either limited or handled without breaking layout                                                 |
+| l   | Name with an accent or non-Latin script (`José`, `प्रिया`) | Accepted and displayed correctly afterwards                                                       |
 
 ### S1.4 OTP edge cases
 
@@ -174,9 +174,9 @@ Each of these must be **rejected with a message that says what to fix**:
 
 **Findings:**
 
-| # | Severity | Summary | Steps / expected / actual | Screenshot |
-| --- | --- | --- | --- | --- |
-| | | | | |
+| #   | Severity | Summary | Steps / expected / actual | Screenshot |
+| --- | -------- | ------- | ------------------------- | ---------- |
+|     |          |         |                           |            |
 
 ---
 
@@ -279,15 +279,15 @@ This is the most important student flow. Use your **own** registered account whe
 
 ### S4.2 Upload — file validation
 
-| # | File | Expected |
-| --- | --- | --- |
-| a | Valid PDF | Accepted |
-| b | Valid JPG / PNG | Accepted |
-| c | `.txt` or `.docx` | Rejected, states allowed types |
-| d | **A `.txt` renamed to `.pdf`** | **Rejected** — the server inspects content, not just the extension |
-| e | File larger than 5 MB | Rejected, states the limit |
-| f | 0-byte file | Rejected gracefully |
-| g | Filename with spaces/unicode (`my cert ग.pdf`) | Accepted, name shown correctly |
+| #   | File                                           | Expected                                                            |
+| --- | ---------------------------------------------- | ------------------------------------------------------------------- |
+| a   | Valid PDF                                      | Accepted                                                            |
+| b   | Valid JPG / PNG                                | Accepted                                                            |
+| c   | `.txt` or `.docx`                              | Rejected, states allowed types                                      |
+| d   | **A `.txt` renamed to `.pdf`**                 | **Rejected** — the server inspects content, not just the extension |
+| e   | File larger than 5 MB                          | Rejected, states the limit                                          |
+| f   | 0-byte file                                    | Rejected gracefully                                                 |
+| g   | Filename with spaces/unicode (`my cert ग.pdf`) | Accepted, name shown correctly                                      |
 
 ### S4.3 Upload — field validation
 
@@ -630,18 +630,18 @@ Check **375px (phone)**, **768px (tablet)** and **1440px (desktop)** across the 
 ## 5. Sign-off
 
 | Suite | Tester | Browser(s) | Date | Result | Critical/High open |
-| --- | --- | --- | --- | --- | --- |
-| S1 | | | | | |
-| S2 | | | | | |
-| S3 | | | | | |
-| S4 | | | | | |
-| S5 | | | | | |
-| S6 | | | | | |
-| S7 | | | | | |
-| S8 | | | | | |
-| S9 | | | | | |
-| S10 | | | | | |
-| S11 | | | | | |
-| S12 | | | | | |
+| ----- | ------ | ---------- | ---- | ------ | ------------------ |
+| S1    |        |            |      |        |                    |
+| S2    |        |            |      |        |                    |
+| S3    |        |            |      |        |                    |
+| S4    |        |            |      |        |                    |
+| S5    |        |            |      |        |                    |
+| S6    |        |            |      |        |                    |
+| S7    |        |            |      |        |                    |
+| S8    |        |            |      |        |                    |
+| S9    |        |            |      |        |                    |
+| S10   |        |            |      |        |                    |
+| S11   |        |            |      |        |                    |
+| S12   |        |            |      |        |                    |
 
 **Definition of done for a suite:** every case executed on at least one browser, every finding logged with steps and a screenshot, and all Critical/High items reported to the maintainer directly.
