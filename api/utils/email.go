@@ -62,12 +62,29 @@ func brevoSendEndpointForTest(url string) func() {
 // failing the whole registration because mail is down would be worse than
 // letting the user request a resend.
 func SendOTP(toEmail, otpCode, purpose string) error {
-	subject := "Verification Code for iSpark"
-	body := fmt.Sprintf("Your OTP code for %s is: %s\nThis code expires in 15 minutes.", purpose, otpCode)
+	// Wording follows the purpose so the inbox shows why the code arrived
+	// instead of one generic subject for every situation.
+	subject := "Your iSPARC verification code"
+	heading := "Verify your email address"
+	intro := "Use the code below to verify your iSPARC account."
+	action := "verify your account"
 
-	if err := deliver(toEmail, subject, body); err != nil {
+	if strings.Contains(strings.ToLower(purpose), "password") {
+		subject = "Reset your iSPARC password"
+		heading = "Reset your password"
+		intro = "We received a request to reset the password for your iSPARC account. Use the code below to choose a new one."
+		action = "set a new password"
+	}
+
+	text := fmt.Sprintf(
+		"%s\n\nYour verification code is: %s\n\nEnter this code in the portal to %s. It expires in 15 minutes and can be used once.\n\nIf you did not request this, you can ignore this email.\n\niSPARC — IIPS, DAVV Indore",
+		intro, otpCode, action,
+	)
+	htmlBody := otpEmail(heading, intro, otpCode, action)
+
+	if err := deliverHTML(toEmail, subject, text, htmlBody); err != nil {
 		log.Printf("OTP delivery to %s failed: %v", toEmail, err)
-		logEmailFallback(toEmail, subject, body)
+		logEmailFallback(toEmail, subject, text)
 	}
 	// Always nil: the OTP is already stored, so a mail outage should not fail
 	// registration when the user can simply request a resend.
@@ -81,11 +98,14 @@ func SendOTP(toEmail, otpCode, purpose string) error {
 //     which SMTP ports frequently are on PaaS hosts such as Render.
 //  2. SMTP (SMTP_HOST/USER/PASS), with an explicit dial timeout.
 //  3. Console logging, so local development needs no mail credentials at all.
-func deliver(toEmail, subject, body string) error {
+// deliverHTML sends a message with both a plain-text and an HTML part, so
+// clients with HTML disabled still get something readable. Pass an empty
+// htmlBody to send text only.
+func deliverHTML(toEmail, subject, body, htmlBody string) error {
 	sender := strings.TrimSpace(os.Getenv("SMTP_SENDER"))
 
 	if apiKey := strings.TrimSpace(os.Getenv("BREVO_API_KEY")); apiKey != "" {
-		if err := sendViaBrevoAPI(apiKey, sender, toEmail, subject, body); err != nil {
+		if err := sendViaBrevoAPI(apiKey, sender, toEmail, subject, body, htmlBody); err != nil {
 			return err
 		}
 		// Accepted, not necessarily delivered: Brevo returns 201 and only then
@@ -107,7 +127,7 @@ func deliver(toEmail, subject, body string) error {
 	if smtpPort == "" {
 		smtpPort = "587"
 	}
-	if err := sendViaSMTP(smtpHost, smtpPort, smtpUser, smtpPass, sender, toEmail, subject, body); err != nil {
+	if err := sendViaSMTP(smtpHost, smtpPort, smtpUser, smtpPass, sender, toEmail, subject, body, htmlBody); err != nil {
 		return fmt.Errorf("smtp send (hosts often block outbound SMTP; set BREVO_API_KEY to send over HTTPS instead): %w", err)
 	}
 
@@ -130,9 +150,10 @@ type brevoPayload struct {
 	To          []brevoContact `json:"to"`
 	Subject     string         `json:"subject"`
 	TextContent string         `json:"textContent"`
+	HTMLContent string         `json:"htmlContent,omitempty"`
 }
 
-func sendViaBrevoAPI(apiKey, sender, toEmail, subject, body string) error {
+func sendViaBrevoAPI(apiKey, sender, toEmail, subject, body, htmlBody string) error {
 	if sender == "" {
 		return fmt.Errorf("SMTP_SENDER is not set; Brevo requires a verified sender address")
 	}
@@ -142,6 +163,7 @@ func sendViaBrevoAPI(apiKey, sender, toEmail, subject, body string) error {
 		To:          []brevoContact{{Email: toEmail}},
 		Subject:     subject,
 		TextContent: body,
+		HTMLContent: htmlBody,
 	})
 	if err != nil {
 		return err
@@ -171,20 +193,33 @@ func sendViaBrevoAPI(apiKey, sender, toEmail, subject, body string) error {
 
 // sendViaSMTP mirrors smtp.SendMail but dials with a timeout, so a host that
 // silently drops outbound SMTP fails in seconds instead of minutes.
-func sendViaSMTP(host, port, user, pass, sender, toEmail, subject, body string) error {
+func sendViaSMTP(host, port, user, pass, sender, toEmail, subject, body, htmlBody string) error {
 	if sender == "" {
 		sender = user
 	}
 
-	msg := []byte(
-		"From: iSpark <" + sender + ">\r\n" +
-			"To: " + toEmail + "\r\n" +
-			"Subject: " + subject + "\r\n" +
-			"MIME-Version: 1.0\r\n" +
-			"Content-Type: text/plain; charset=UTF-8\r\n" +
-			"\r\n" +
-			body + "\r\n",
-	)
+	headers := "From: iSPARC <" + sender + ">\r\n" +
+		"To: " + toEmail + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"MIME-Version: 1.0\r\n"
+
+	var msg []byte
+	if htmlBody == "" {
+		msg = []byte(headers + "Content-Type: text/plain; charset=UTF-8\r\n\r\n" + body + "\r\n")
+	} else {
+		// multipart/alternative: clients pick the richest part they support, so
+		// HTML-disabled readers still see the plain-text version.
+		boundary := "ispark-boundary-8f2c1d"
+		msg = []byte(headers +
+			"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n" +
+			"--" + boundary + "\r\n" +
+			"Content-Type: text/plain; charset=UTF-8\r\n\r\n" +
+			body + "\r\n\r\n" +
+			"--" + boundary + "\r\n" +
+			"Content-Type: text/html; charset=UTF-8\r\n\r\n" +
+			htmlBody + "\r\n\r\n" +
+			"--" + boundary + "--\r\n")
+	}
 
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), emailSMTPTimeout)
 	if err != nil {
@@ -247,7 +282,7 @@ func NormalizeEmail(email string) string {
 // It shares deliver() with SendOTP so notices also go over HTTPS where possible;
 // sending them over raw SMTP would stall the request on hosts that block it.
 func SendEmail(toEmail, subject, body string) error {
-	if err := deliver(toEmail, subject, body); err != nil {
+	if err := deliverHTML(toEmail, subject, body, noticeEmail(subject, body)); err != nil {
 		log.Printf("Email send to %s failed: %v", toEmail, err)
 		logEmailFallback(toEmail, subject, body)
 		return err

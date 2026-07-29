@@ -70,7 +70,58 @@ func TestSendOTPUsesBrevoAPIWhenKeyPresent(t *testing.T) {
 		t.Fatalf("recipient = %+v", payload.To)
 	}
 	if !strings.Contains(payload.TextContent, "123456") {
-		t.Fatalf("body missing the OTP: %q", payload.TextContent)
+		t.Fatalf("text body missing the OTP: %q", payload.TextContent)
+	}
+
+	// The HTML alternative must be sent too, carry the code, and be a real
+	// document rather than the plain text wrapped in a tag.
+	if !strings.Contains(payload.HTMLContent, "123456") {
+		t.Fatal("html body missing the OTP")
+	}
+	if !strings.Contains(payload.HTMLContent, "<!DOCTYPE html>") {
+		t.Fatal("html body is not a full document")
+	}
+	if !strings.Contains(payload.HTMLContent, "iSPARC") {
+		t.Fatal("html body missing the branding header")
+	}
+}
+
+// A reset code must be described as a password reset, not as account
+// verification, so the recipient can tell the two apart in their inbox.
+func TestSendOTPWordsPasswordResetDifferently(t *testing.T) {
+	var payload brevoPayload
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &payload)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	restore := brevoSendEndpointForTest(srv.URL)
+	defer restore()
+	t.Setenv("BREVO_API_KEY", "test-key")
+	t.Setenv("SMTP_SENDER", "sender@example.com")
+
+	if err := SendOTP("student@example.com", "654321", "password reset"); err != nil {
+		t.Fatalf("SendOTP: %v", err)
+	}
+
+	if !strings.Contains(strings.ToLower(payload.Subject), "password") {
+		t.Fatalf("subject should mention the password reset, got %q", payload.Subject)
+	}
+	if !strings.Contains(payload.HTMLContent, "654321") {
+		t.Fatal("html body missing the reset code")
+	}
+}
+
+// HTML must be escaped so a name or note containing markup cannot inject it.
+func TestNoticeEmailEscapesHTML(t *testing.T) {
+	out := noticeEmail("Notice", `<script>alert('x')</script> plain line`)
+	if strings.Contains(out, "<script>") {
+		t.Fatal("noticeEmail did not escape embedded markup")
+	}
+	if !strings.Contains(out, "&lt;script&gt;") {
+		t.Fatal("expected the markup to appear escaped")
 	}
 }
 

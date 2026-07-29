@@ -16,7 +16,7 @@ This is the full manual test suite for the iSPARC testing round. It is written f
 
 > **The first request of the day is slow.** The API sleeps after ~15 minutes of inactivity and takes up to a minute to wake. A slow *first* login is expected and is **not a bug**. A slow *second* request is a bug — report it.
 
-> **This is a shared database.** Everyone tests against the same data. If you change or delete something, other testers see it. Follow the "restore" notes in each case, and prefer creating your own records over editing seeded ones.
+> **This is a shared database.** Everyone tests against the same data, so anything you create or change is visible to other testers. Prefer creating your own records over editing someone else's, name them recognisably (e.g. `S4-test-activity`), and restore any password you change back to `Pass@123`.
 
 ### Browsers to cover
 
@@ -30,10 +30,10 @@ Every account below uses the password **`Pass@123`**.
 
 | Role | Login | Portal | Notes |
 | --- | --- | --- | --- |
-| Student | `rahul.sharma@iips.edu` | `/login` | IT2K24 — richest data, 3 certificates |
-| Student | `sneha.kumar@iips.edu` | `/login` | IT2K24 — 2 certificates |
-| Student | `arjun.desai@iips.edu` | `/login` | IT2K24 — **has a rejected certificate** |
-| Student | `vikram.singh@iips.edu` | `/login` | IT2K24 — **empty account**, no activity |
+| Student | `rahul.sharma@iips.edu` | `/login` | IT2K24 |
+| Student | `sneha.kumar@iips.edu` | `/login` | IT2K24 |
+| Student | `arjun.desai@iips.edu` | `/login` | IT2K24 |
+| Student | `vikram.singh@iips.edu` | `/login` | IT2K24 — keep this one empty as a control |
 | Student | `priya.nair@iips.edu` | `/login` | IT2K25 — different batch |
 | Admin | `admin` | `/admin-portal` | Scoped to batch **IT2K24** |
 | Admin | `admin2` | `/admin-portal` | Scoped to batch **IT2K25** |
@@ -41,21 +41,38 @@ Every account below uses the password **`Pass@123`**.
 
 Each login page also has a collapsible **Dev: demo credentials** panel.
 
-### Baseline data (freshly reset before this round)
+### Starting state: an empty canvas
 
-Knowing the starting numbers lets you spot wrong ones.
+The database was deliberately cleared before this round. **Only the accounts above exist.** There are no activities, tracks, certificates, enrolments or announcements — you create everything yourself, which is the point: it exercises the real product flow from zero and means no seeded data can mask a bug.
 
-| Entity | Count | Detail |
-| --- | --- | --- |
-| Students | 8 | 5 in IT2K24, 3 in IT2K25 |
-| Admins | 3 | 2 batch admins + 1 super admin |
-| Activities | 7 | one per category |
-| Tracks | 2 | Skill Building, Personality Development |
-| Certificates | 10 | **6 Approved, 3 Pending, 1 Rejected** |
-| Enrolments | 11 | |
-| Announcements | 4 | mixed active/draft/expired |
+| Entity | Count at start |
+| --- | --- |
+| Students | 8 (5 in IT2K24, 3 in IT2K25) |
+| Admins | 3 (2 batch admins + 1 super admin) |
+| Platform settings | 26 |
+| Activities, tracks, certificates, enrolments, announcements, reports | **0** |
 
-Certificate IDs are `1`–`10`. Pending ones are IDs **3, 5, 9**; the rejected one is **7**.
+Two consequences to expect, which are **not bugs**:
+
+- Every list starts empty. An empty state should be a friendly message, never a blank panel, a permanent spinner, or `undefined`/`NaN` — if you see those, that *is* a bug worth reporting.
+- Dashboards, leaderboards and analytics read zero until data exists.
+
+### Suite order matters
+
+Because nothing exists yet, some suites need data another suite creates. Run them roughly in this order, or create what you need yourself:
+
+```
+S10 (super admin: create a track, then an activity)
+   └─> S3  (student: browse + enrol in that activity)
+          └─> S4  (student: upload a certificate)
+                 └─> S8  (admin: verify/approve it)
+                        └─> S5  (student: credits + marksheet PDF now have content)
+                               └─> S6/S9/S11 (leaderboard, analytics, reports have data)
+```
+
+S1, S2, S7 and S12 need no pre-existing data and can start immediately.
+
+> If you are blocked waiting on data, say so in your report rather than skipping the case — "could not test, no approved certificate existed yet" is useful information.
 
 ---
 
@@ -212,19 +229,19 @@ Use `vikram.singh@iips.edu` (the empty account) so a password change affects nob
 
 **Tester:** ______  **Browser:** ______  **Date:** ______
 
-Primary account: `rahul.sharma@iips.edu`. Comparison account: `vikram.singh@iips.edu` (empty).
+Primary account: `rahul.sharma@iips.edu`. Keep `vikram.singh@iips.edu` untouched as an always-empty control for comparing empty states.
 
 ### S3.1 Dashboard accuracy
 
 1. Stat cards (credits, enrolments, certificates, rank) show **real** numbers.
 2. Cross-check: the certificate count must equal the rows under **My Certificates**.
-3. Log in as `vikram.singh` → the same cards read zero with a sensible empty state, **not** blank boxes, "NaN", "undefined" or a spinner that never stops.
+3. Log in as `vikram.singh` (the untouched control) → the cards read zero with a sensible empty state, **not** blank boxes, "NaN", "undefined" or a spinner that never stops.
 4. The academic year label shows the **current** year, not a hardcoded past one.
 5. "Recent activity" matches things that account actually did.
 
 ### S3.2 Browse activities
 
-1. All 7 seeded activities appear with title, category, credits and dates.
+1. Every activity created in S10 appears with title, category, credits and dates. (If none exist yet, confirm the empty state is friendly, then come back after S10.)
 2. Category grouping shows no duplicate category caused by capitalisation (e.g. `TECHNICAL` and `Technical` as separate groups).
 3. Search and filters return the right subset; clearing them restores the full list.
 4. Search for something that cannot match (`zzzzz`) → a proper "no results" message.
@@ -284,13 +301,13 @@ This is the most important student flow. Use your **own** registered account whe
 ### S4.4 Viewing & downloading
 
 1. Download your own certificate → the correct file opens.
-2. Log in as `arjun.desai@iips.edu` → the rejected certificate is clearly marked **Rejected** **and shows the reason**.
+2. Once S8 has rejected one of your certificates, confirm it is clearly marked **Rejected** **and shows the reason**.
 3. Status filters/tabs return the right subsets.
 4. Empty state for a student with no certificates is friendly.
 
 ### S4.5 Re-upload after rejection
 
-1. As `arjun.desai`, try to upload a replacement for the rejected certificate.
+1. For a certificate that S8 rejected, try to upload a replacement.
 2. Report whether this is possible and whether it is obvious how — replacing a rejected certificate is a required behaviour, so if there is no way to do it, log it as **High**.
 
 **Findings:** *(table)*
@@ -314,7 +331,7 @@ This is the most important student flow. Use your **own** registered account whe
 1. Rows correspond to real approved activities for that student.
 2. Student name, roll number, course, semester and academic year are correct.
 3. Totals at the bottom match the rows above.
-4. For `vikram.singh` (no activity) the marksheet renders an empty state rather than a broken table.
+4. For `vikram.singh` (the untouched control) the marksheet renders an empty state rather than a broken table.
 
 ### S5.3 PDF export — **priority for this round**
 
@@ -327,7 +344,7 @@ This was recently rebuilt; test it carefully.
 5. If content spans multiple pages, no row is cut in half across a page break.
 6. Table headers, the signature/verification block and the footer all appear.
 7. Repeat on a **second browser** — report any difference.
-8. Repeat for a student with **many** activities (`rahul.sharma`) and one with **none** (`vikram.singh`).
+8. Repeat for a student with **several** approved activities and for `vikram.singh`, who has **none**.
 9. Report honestly whether the result looks like an official document you would hand to a student. Attach the PDF.
 
 **Findings:** *(table — attach the generated PDFs)*
@@ -418,7 +435,7 @@ This closes the product's core loop: student uploads → mentor verifies → cre
 
 ### S8.3 Approve — must persist
 
-1. Note a Pending certificate (IDs 3, 5 or 9) and the owning student.
+1. Note a Pending certificate uploaded in S4 and the owning student.
 2. Approve it → confirmation.
 3. **Reload the page.** It must still be Approved. *(Reverting to Pending after reload is a Critical finding.)*
 4. Log in as that student → the certificate shows Approved **and its credits now count** on their dashboard.
@@ -438,7 +455,7 @@ This closes the product's core loop: student uploads → mentor verifies → cre
 3. Double-click Approve → applied once.
 4. **Tampering:** as `admin2`, try to approve an IT2K24 certificate via a manipulated URL/ID → must be refused. **Critical if it succeeds.**
 
-> **Restore note:** record every certificate you approve/reject and tell the maintainer, so the baseline (6 Approved / 3 Pending / 1 Rejected) can be restored.
+> **Note:** you are working with certificates created during this round, so there is no baseline to restore. Do record what you approved and rejected in your report so other testers know what state the data is in.
 
 **Findings:** *(table)*
 
@@ -453,7 +470,7 @@ These were newly wired to real data — check the numbers are real, not decorati
 ### S9.1 Activity monitoring
 
 1. The page loads with statistics, not spinners.
-2. Numbers are plausible against the 7 seeded activities and your batch's students.
+2. Numbers are plausible against the activities that exist and your batch's students. With no data yet, zeros are correct — confirm they read as zero rather than blank.
 3. Insights/"students requiring attention" reference **real** students from your batch only.
 4. Any filters work.
 5. Send a reminder to a student (if offered) → clear success/failure feedback. Note whether an email actually arrives.
@@ -480,7 +497,7 @@ These were newly wired to real data — check the numbers are real, not decorati
 ### S10.1 Access & dashboard
 
 1. `superadmin` signs in at `/super-admin-portal`; a plain `admin` is refused.
-2. The four stat cards show real platform totals (baseline: 8 students, 3 admins, 7 activities).
+2. The four stat cards show real platform totals. At the start that is 8 students and 3 admins, with 0 activities; the activity count must increase after you create one.
 3. Notifications describe real platform state, not invented security alerts.
 4. "Recent system activity" reflects genuine actions — perform an action (e.g. create a track) and confirm it appears.
 
@@ -523,7 +540,7 @@ These were newly wired to real data — check the numbers are real, not decorati
 
 ### S11.1 Announcements
 
-1. The 4 seeded announcements list with correct status chips.
+1. The announcement list starts empty with a friendly empty state.
 2. Create a **draft** → persists.
 3. **Publish** it → status changes and survives reload.
 4. Edit and delete → persist.
@@ -533,7 +550,7 @@ These were newly wired to real data — check the numbers are real, not decorati
 
 ### S11.2 System settings
 
-1. Settings load, grouped by category (baseline: 26 entries).
+1. Settings load, grouped by category (26 entries — settings were intentionally kept).
 2. Change a value → save → reload → persisted.
 3. Invalid values (letters where a number belongs, negatives) → rejected.
 4. **If a "graduation target credits" setting exists**, change it and confirm the student Credits & Progress screen reflects the new target. Restore it afterwards.
