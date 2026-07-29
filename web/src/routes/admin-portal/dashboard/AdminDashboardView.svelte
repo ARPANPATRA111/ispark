@@ -67,7 +67,7 @@
 		verification_rate: 0
 	});
 
-	// Mock Certificate Data State -> Now dynamic
+	// Certificate data, loaded from the API.
 	let pendingCertificates = $state<PendingCertificate[]>([]);
 
 	// Recent Student Activities (Read-only list, matching image)

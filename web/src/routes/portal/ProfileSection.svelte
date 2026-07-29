@@ -27,8 +27,7 @@
 		status: 'Active Student',
 		verified: true,
 		photoUrl: '', // Empty for now, missing photo
-		emailVerified: true,
-		phoneVerified: true,
+		emailVerified: false, // set from the account's real verification flag
 		lastLogin: 'Today',
 		lastPasswordChange: '-'
 	});
@@ -65,14 +64,121 @@
 				profile.course = s.course_name;
 				profile.semester = `Semester ${s.semester}`;
 				profile.verified = s.is_verified;
+				profile.emailVerified = s.is_verified;
 			}
 		} catch (err) {
 			console.error(err);
 		}
 	}
 
+	// Everything on the right-hand column used to be hardcoded (118 credits, 24
+	// activities, three "verified" achievements, five skill tracks) regardless of
+	// the account. It is all loaded from the API now.
+	interface ProfileStats {
+		activities: number;
+		certificates: number;
+		credits: number;
+		rank: number | null;
+		totalStudents: number;
+	}
+
+	interface Achievement {
+		name: string;
+		credits: number;
+	}
+
+	let stats = $state<ProfileStats>({
+		activities: 0,
+		certificates: 0,
+		credits: 0,
+		rank: null,
+		totalStudents: 0
+	});
+	let targetCredits = $state(200);
+	let achievements = $state<Achievement[]>([]);
+	let skillTracks = $state<string[]>([]);
+	let statsLoaded = $state(false);
+
+	const creditPercent = $derived(
+		targetCredits > 0 ? Math.min(Math.round((stats.credits / targetCredits) * 100), 100) : 0
+	);
+	const creditsRemaining = $derived(Math.max(targetCredits - stats.credits, 0));
+
+	async function loadStats() {
+		const auth = { Authorization: `Bearer ${token}` };
+		try {
+			const [statsRes, marksheetRes, certRes, enrolRes] = await Promise.all([
+				fetch(`${API_BASE_URL}/api/student/dashboard/stats`, { headers: auth }),
+				fetch(`${API_BASE_URL}/api/student/marksheet`, { headers: auth }),
+				fetch(`${API_BASE_URL}/api/student/certificates`, { headers: auth }),
+				fetch(`${API_BASE_URL}/api/student/enrollments`, { headers: auth })
+			]);
+
+			if (statsRes.ok) {
+				const d = await statsRes.json();
+				stats = {
+					activities: d.activities_participated ?? 0,
+					certificates: d.certificates_uploaded ?? 0,
+					credits: d.credits_earned ?? 0,
+					rank: d.current_rank ?? null,
+					totalStudents: d.total_students ?? 0
+				};
+			}
+
+			if (marksheetRes.ok) {
+				const d = await marksheetRes.json();
+				if (d.target_credits) targetCredits = d.target_credits;
+				// Academic details come from the server rather than being fixed in
+				// the component, where batch was hardcoded to "2021 - 2026".
+				const info = d.student_info;
+				if (info) {
+					if (info.batch) profile.batch = info.batch;
+					if (info.department) profile.department = info.department;
+					if (info.institute) profile.institute = info.institute;
+					if (info.course) profile.course = info.course;
+				}
+			}
+
+			// Achievements are the student's approved certificates, highest credit
+			// first — an "achievement" here is a verified accomplishment, so an
+			// unapproved certificate must not appear as one.
+			if (certRes.ok) {
+				const list = await certRes.json();
+				achievements = (Array.isArray(list) ? list : [])
+					.filter((c: { status?: string }) => c.status === 'Approved')
+					.sort(
+						(a: { credits?: number }, b: { credits?: number }) =>
+							(b.credits ?? 0) - (a.credits ?? 0)
+					)
+					.slice(0, 5)
+					.map((c: { activity_name?: string; credits?: number }) => ({
+						name: c.activity_name ?? 'Untitled activity',
+						credits: c.credits ?? 0
+					}));
+			}
+
+			// Registered tracks are the distinct categories of the activities this
+			// student actually enrolled in.
+			if (enrolRes.ok) {
+				const d = await enrolRes.json();
+				const rows = d.enrollments ?? d ?? [];
+				const seen: string[] = [];
+				for (const row of Array.isArray(rows) ? rows : []) {
+					const category = row?.activity?.category ?? row?.category;
+					if (category && !seen.includes(String(category))) seen.push(String(category));
+				}
+				skillTracks = seen;
+			}
+		} catch (err) {
+			console.error(err);
+		} finally {
+			statsLoaded = true;
+		}
+	}
+
 	$effect(() => {
 		loadProfile();
+		loadStats();
 	});
 
 	// UI Interactive States
@@ -594,57 +700,11 @@
 						</svg>
 						<span class="text-slate-800 font-bold">Email Verification</span>
 					</div>
-					<div class="flex items-center gap-1 text-emerald-600 font-bold">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 20 20"
-							fill="currentColor"
-							class="w-4 h-4"
-						>
-							<path
-								fill-rule="evenodd"
-								d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5z"
-								clip-rule="evenodd"
-							/>
-						</svg>
-						Verified
-					</div>
-				</div>
-
-				<div class="flex items-center justify-between py-1">
-					<div class="flex items-center gap-3">
-						<!-- Icon -->
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-							stroke="currentColor"
-							class="w-5 h-5 text-slate-400"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-2.824-1.502-5.184-3.864-6.686-6.686l1.294-.97c.362-.272.528-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25z"
-							/>
-						</svg>
-						<span class="text-slate-800 font-bold">Phone Verification</span>
-					</div>
-					<div class="flex items-center gap-1 text-emerald-600 font-bold">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 20 20"
-							fill="currentColor"
-							class="w-4 h-4"
-						>
-							<path
-								fill-rule="evenodd"
-								d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5z"
-								clip-rule="evenodd"
-							/>
-						</svg>
-						Verified
-					</div>
+					{#if profile.emailVerified}
+						<div class="flex items-center gap-1 text-emerald-600 font-bold">Verified</div>
+					{:else}
+						<div class="flex items-center gap-1 text-amber-600 font-bold">Not verified</div>
+					{/if}
 				</div>
 
 				<div class="flex items-center justify-between py-1">
@@ -729,7 +789,9 @@
 				<div
 					class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between"
 				>
-					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none">24</span>
+					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none"
+						>{stats.activities}</span
+					>
 					<span class="text-[11px] font-bold text-slate-500 mt-3 block leading-tight"
 						>Activities Participated</span
 					>
@@ -739,7 +801,9 @@
 				<div
 					class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between"
 				>
-					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none">18</span>
+					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none"
+						>{stats.certificates}</span
+					>
 					<span class="text-[11px] font-bold text-slate-500 mt-3 block leading-tight"
 						>Certificates Uploaded</span
 					>
@@ -749,7 +813,9 @@
 				<div
 					class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between"
 				>
-					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none">118</span>
+					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none"
+						>{stats.credits}</span
+					>
 					<span class="text-[11px] font-bold text-slate-500 mt-3 block leading-tight"
 						>Credits Earned</span
 					>
@@ -759,7 +825,9 @@
 				<div
 					class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between"
 				>
-					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none">#4</span>
+					<span class="text-3xl font-extrabold text-slate-900 font-serif leading-none"
+						>{stats.rank ? `#${stats.rank}` : '—'}</span
+					>
 					<span class="text-[11px] font-bold text-slate-500 mt-3 block leading-tight"
 						>Leaderboard Rank</span
 					>
@@ -777,23 +845,25 @@
 
 			<div class="flex items-baseline justify-between">
 				<div class="flex items-baseline gap-1">
-					<span class="text-3xl font-extrabold text-[#0B1535]">118</span>
+					<span class="text-3xl font-extrabold text-[#0B1535]">{stats.credits}</span>
 					<span class="text-xs text-slate-400 font-bold uppercase tracking-wider"
-						>/ 200 Credits</span
+						>/ {targetCredits} Credits</span
 					>
 				</div>
-				<span class="text-xs font-bold text-[#881B1B] uppercase tracking-wide">59% Complete</span>
+				<span class="text-xs font-bold text-[#881B1B] uppercase tracking-wide"
+					>{creditPercent}% Complete</span
+				>
 			</div>
 
 			<!-- Custom Progress Bar -->
 			<div class="h-2.5 w-full bg-slate-105 rounded-full overflow-hidden">
-				<div class="h-full bg-[#881B1B] rounded-full" style="width: 59%"></div>
+				<div class="h-full bg-[#881B1B] rounded-full" style="width: {creditPercent}%"></div>
 			</div>
 
 			<!-- Detail counters -->
 			<div class="flex items-center justify-between text-[11px] font-bold text-slate-500">
-				<span>Credits Earned: <strong class="text-[#0B1535]">118</strong></span>
-				<span>Remaining: <strong class="text-slate-800">82</strong></span>
+				<span>Credits Earned: <strong class="text-[#0B1535]">{stats.credits}</strong></span>
+				<span>Remaining: <strong class="text-slate-800">{creditsRemaining}</strong></span>
 			</div>
 		</div>
 
@@ -806,14 +876,20 @@
 			</div>
 
 			<div class="flex flex-wrap gap-2.5 pt-1">
-				{#each [{ name: 'Technical Skills', color: 'bg-red-50 text-[#881B1B] border-red-150' }, { name: 'Public Speaking', color: 'bg-amber-50 text-[#C89B3C] border-amber-150' }, { name: 'Social Service (NSS)', color: 'bg-emerald-50 text-emerald-700 border-emerald-150' }, { name: 'Athletics', color: 'bg-blue-50 text-blue-700 border-blue-150' }, { name: 'Research & Innovation', color: 'bg-purple-50 text-purple-700 border-purple-150' }] as track}
-					<span
-						class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border {track.color} transition-all duration-200 shadow-3xs"
-					>
-						<span class="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
-						{track.name}
-					</span>
-				{/each}
+				{#if skillTracks.length === 0}
+					<p class="text-xs text-slate-400 font-semibold">
+						{statsLoaded ? 'No tracks yet. Enrol in an activity to register a track.' : 'Loading…'}
+					</p>
+				{:else}
+					{#each skillTracks as track (track)}
+						<span
+							class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border bg-red-50 text-[#881B1B] border-red-150 transition-all duration-200 shadow-3xs"
+						>
+							<span class="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
+							{track}
+						</span>
+					{/each}
+				{/if}
 			</div>
 		</div>
 
@@ -826,7 +902,14 @@
 			</div>
 
 			<div class="space-y-3.5 pt-1">
-				{#each [{ name: 'National Science Olympiad', points: '20 Credits' }, { name: 'Inter College Debate Championship', points: '15 Credits' }, { name: 'Hackathon Finalist', points: '12 Credits' }] as award}
+				{#if achievements.length === 0}
+					<p class="text-xs text-slate-400 font-semibold">
+						{statsLoaded
+							? 'No achievements yet. Approved certificates appear here once a mentor verifies them.'
+							: 'Loading…'}
+					</p>
+				{/if}
+				{#each achievements as award (award.name)}
 					<div
 						class="flex items-center justify-between p-3.5 border border-slate-150 bg-slate-50/40 hover:bg-slate-50 rounded-xl transition duration-150 gap-4"
 					>
@@ -853,7 +936,7 @@
 							<div>
 								<h4 class="text-xs font-bold text-[#0B1535] leading-tight">{award.name}</h4>
 								<p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
-									{award.points}
+									{award.credits} Credits
 								</p>
 							</div>
 						</div>

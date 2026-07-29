@@ -208,6 +208,15 @@
 		});
 	});
 
+	// Top categories that actually have activities, used for the recommendation
+	// chips. Empty until activities exist, which hides the row entirely.
+	let recommendedCategories = $derived(
+		categoriesCounts
+			.filter((c) => c.count > 0)
+			.sort((a, b) => b.count - a.count)
+			.slice(0, 3)
+	);
+
 	// Filters State
 	let showFilters = $state(true);
 	let tempFilters = $state({
@@ -484,87 +493,31 @@
 		</div>
 
 		<!-- Recommended For You Row -->
-		<div class="space-y-2.5">
-			<h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
-				Recommended For You <span class="text-[10px] text-slate-400 normal-case font-medium"
-					>Based on your enrolled tracks</span
-				>
-			</h3>
-			<div class="flex flex-wrap gap-2.5">
-				<button
-					onclick={() => handleRecommendedClick('TECHNICAL')}
-					class="flex items-center gap-2 px-4 py-2 border border-[#881B1B]/20 bg-red-50 text-[#881B1B] rounded-lg text-xs font-bold hover:bg-[#881B1B]/10 transition cursor-pointer"
-				>
-					<!-- Sparkles Icon -->
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-						stroke="currentColor"
-						class="w-4 h-4"
+		<!-- Derived from the categories that actually have activities. The chips and
+		     their counts used to be hardcoded (Technical 6, Research 4, Public
+		     Speaking 3) and were shown even when no activity existed at all. -->
+		{#if recommendedCategories.length > 0}
+			<div class="space-y-2.5">
+				<h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
+					Recommended For You <span class="text-[10px] text-slate-400 normal-case font-medium"
+						>Categories with the most activities available</span
 					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.096L15 15l-5.187.904zM18 5.25L17.25 8 16.5 5.25 13.75 4.5l2.75-.75L17.25 1l.75 2.75 2.75.75-2.75.75z"
-						/>
-					</svg>
-					Technical Skill Track
-					<span class="bg-[#881B1B] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-						>6</span
-					>
-				</button>
-				<button
-					onclick={() => handleRecommendedClick('RESEARCH')}
-					class="flex items-center gap-2 px-4 py-2 border border-purple-200 bg-purple-50 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-100 transition cursor-pointer"
-				>
-					<!-- Beaker/Science Icon -->
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-						stroke="currentColor"
-						class="w-4 h-4"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9.75 3.104v11.896m5.25-11.896v11.896M2.25 21h19.5M10 3.75h4"
-						/>
-					</svg>
-					Research & Innovation
-					<span class="bg-purple-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-						>4</span
-					>
-				</button>
-				<button
-					onclick={() => handleRecommendedClick('PUBLIC SPEAKING')}
-					class="flex items-center gap-2 px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-100 transition cursor-pointer"
-				>
-					<!-- Mic Icon -->
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-						stroke="currentColor"
-						class="w-4 h-4"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 0 3-3V4.5a3 3 0 0 0-6 0v8.25a3 3 0 0 0 3 3z"
-						/>
-					</svg>
-					Public Speaking
-					<span class="bg-amber-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-						>3</span
-					>
-				</button>
+				</h3>
+				<div class="flex flex-wrap gap-2.5">
+					{#each recommendedCategories as rec (rec.name)}
+						<button
+							onclick={() => handleRecommendedClick(rec.name.toUpperCase())}
+							class="flex items-center gap-2 px-4 py-2 border border-[#881B1B]/20 bg-red-50 text-[#881B1B] rounded-lg text-xs font-bold hover:bg-[#881B1B]/10 transition cursor-pointer"
+						>
+							{rec.name}
+							<span class="bg-[#881B1B] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+								>{rec.count}</span
+							>
+						</button>
+					{/each}
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<!-- Activities Grid Section -->
 		<div class="space-y-4">

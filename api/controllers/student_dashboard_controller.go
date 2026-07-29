@@ -351,18 +351,22 @@ func GetLeaderboard(c *fiber.Ctx) error {
 		CourseName string `json:"course_name"`
 		Semester   int    `json:"semester"`
 		Points     int    `json:"points"`
+		Activities int    `json:"activities"`
 		IsSelf     bool   `json:"is_self"`
 	}
 
 	var entries []LeaderboardEntry
 
+	// Activities is the number of approved certificates counted in the same
+	// window as the points, so the leaderboard does not have to estimate it.
 	err = config.DB.Raw(`
 		SELECT
 			s.roll_no,
 			s.name,
 			s.course_name,
 			s.semester,
-			COALESCE(SUM(c.credits), 0) as points
+			COALESCE(SUM(c.credits), 0) as points,
+			COUNT(c.id) as activities
 		FROM students s
 		LEFT JOIN certificates c ON c.student_roll_no = s.roll_no
 			AND c.status = 'Approved'

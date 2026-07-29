@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { API_BASE_URL } from '$lib/config';
 
+	// '—' is used when a student has no verified credits and therefore no grade.
+	type Grade = 'O' | 'A' | 'B' | '—';
+
 	// Define interfaces
 	interface Student {
 		rank: string;
@@ -10,7 +13,7 @@
 		sem: number;
 		activities: number;
 		credits: number;
-		grade: 'O' | 'A' | 'B';
+		grade: Grade;
 		isSelf?: boolean;
 		avatarBg: string;
 	}
@@ -56,6 +59,7 @@
 		course_name: string;
 		semester: number;
 		points: number;
+		activities: number;
 		is_self: boolean;
 	}
 
@@ -125,10 +129,12 @@
 			const rankVal = idx + 1;
 			const rankStr = rankVal < 10 ? `0${rankVal}` : `${rankVal}`;
 
-			// Simple grade thresholds based on credits
-			let grade: 'O' | 'A' | 'B' = 'B';
+			// Grade bands. A student with no verified credits has no grade yet —
+			// defaulting everyone to "B" implied an achievement nobody had earned.
+			let grade: Grade = '—';
 			if (item.points >= 120) grade = 'O';
 			else if (item.points >= 80) grade = 'A';
+			else if (item.points > 0) grade = 'B';
 
 			const colors = [
 				'bg-amber-100 text-amber-800 border-amber-300',
@@ -146,7 +152,7 @@
 				name: item.name,
 				course: item.course_name,
 				sem: item.semester,
-				activities: Math.max(Math.round(item.points / 12), 1),
+				activities: item.activities ?? 0,
 				credits: item.points,
 				grade: grade,
 				isSelf: item.is_self,
@@ -164,7 +170,7 @@
 			avatarBg: 'bg-slate-100',
 			course: '',
 			sem: 0,
-			grade: 'B' as const
+			grade: '—' as const
 		}
 	);
 	let podiumSecond = $derived(
@@ -175,7 +181,7 @@
 			avatarBg: 'bg-slate-100',
 			course: '',
 			sem: 0,
-			grade: 'B' as const
+			grade: '—' as const
 		}
 	);
 	let podiumThird = $derived(
@@ -186,7 +192,7 @@
 			avatarBg: 'bg-slate-100',
 			course: '',
 			sem: 0,
-			grade: 'B' as const
+			grade: '—' as const
 		}
 	);
 
@@ -267,7 +273,7 @@
 		}
 	]);
 
-	function getGradeColors(grade: 'O' | 'A' | 'B') {
+	function getGradeColors(grade: Grade) {
 		switch (grade) {
 			case 'O':
 				return {

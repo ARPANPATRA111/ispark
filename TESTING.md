@@ -45,12 +45,15 @@ Each login page also has a collapsible **Dev: demo credentials** panel.
 
 The database was deliberately cleared before this round. **Only the accounts above exist.** There are no activities, tracks, certificates, enrolments or announcements — you create everything yourself, which is the point: it exercises the real product flow from zero and means no seeded data can mask a bug.
 
-| Entity                                                               | Count at start                     |
-| -------------------------------------------------------------------- | ---------------------------------- |
-| Students                                                             | 8 (5 in IT2K24, 3 in IT2K25)       |
-| Admins                                                               | 3 (2 batch admins + 1 super admin) |
-| Platform settings                                                    | 26                                 |
-| Activities, tracks, certificates, enrolments, announcements, reports | **0**                              |
+| Entity                                                       | Count at start                                      |
+| ------------------------------------------------------------ | --------------------------------------------------- |
+| Students                                                     | 8 (5 in IT2K24, 3 in IT2K25)                        |
+| Admins                                                       | 3 (2 batch admins + 1 super admin)                  |
+| Platform settings                                            | 26                                                  |
+| Tracks                                                       | 2 — *Skill Building* and *Personality Development* |
+| Activities, certificates, enrolments, announcements, reports | **0**                                               |
+
+The two tracks are kept deliberately: they are the institute's two real tracks, and the API assigns new activities to one of them by default, so with no tracks at all creating an activity fails with a confusing "Track does not exist" error. You can still create, rename and delete tracks freely in S10.
 
 Two consequences to expect, which are **not bugs**:
 

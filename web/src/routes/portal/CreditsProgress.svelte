@@ -187,13 +187,12 @@
 				<div class="h-full bg-[#881B1B] rounded-full" style="width: {progressPercentage}%"></div>
 			</div>
 
-			<!-- Labels scale -->
+			<!-- Labels scale: quarters of the configured target, so the axis stays
+			     correct if the graduation requirement changes. -->
 			<div class="flex justify-between text-[10px] font-bold text-slate-400 font-sans px-1">
-				<span>0</span>
-				<span>50</span>
-				<span>100</span>
-				<span>150</span>
-				<span>200</span>
+				{#each [0, 0.25, 0.5, 0.75, 1] as fraction (fraction)}
+					<span>{Math.round(targetCredits * fraction)}</span>
+				{/each}
 			</div>
 		</div>
 	</section>

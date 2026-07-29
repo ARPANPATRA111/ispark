@@ -79,6 +79,15 @@
 	);
 	const creditsRemaining = $derived(Math.max(0, student.creditsTarget - student.creditsEarned));
 	const participationScore = $derived(Math.min(98, 50 + student.activityCount * 2));
+
+	// The student's own highest-credit verified activity. This panel previously
+	// showed a fixed "NPTEL Certification / 20 Credits" for every student.
+	// 'Completed' is this view's label for an approved certificate.
+	const topActivity = $derived(
+		[...certificates]
+			.filter((c) => c.status === 'Completed')
+			.sort((a, b) => (b.credits ?? 0) - (a.credits ?? 0))[0] ?? null
+	);
 	const pendingCerts = $derived(student.pendingCertificates);
 
 	// ── Table State ──────────────────────────────────────────────────────────────
@@ -954,8 +963,12 @@
 						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Highest Credit Activity</span
 						>
-						<span class="block truncate text-sm font-bold text-slate-900">NPTEL Certification</span>
-						<span class="text-[10px] font-semibold text-slate-500">20 Credits</span>
+						<span class="block truncate text-sm font-bold text-slate-900"
+							>{topActivity ? topActivity.name : '—'}</span
+						>
+						<span class="text-[10px] font-semibold text-slate-500"
+							>{topActivity ? `${topActivity.credits} Credits` : 'No verified activity yet'}</span
+						>
 					</div>
 				</div>
 

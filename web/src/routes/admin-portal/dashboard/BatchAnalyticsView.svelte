@@ -141,7 +141,8 @@
 			if (data.alerts) alerts = data.alerts;
 			if (data.requirements) requirements = data.requirements;
 
-			// If you don't want the hardcoded reports to show when API lacks them, uncomment below:
+			// reports lists the available export types (UI config, not data); the API
+			// may override it with a server-defined set.
 			// reports = data.reports || [];
 			if (data.reports) reports = data.reports;
 		} catch (err) {
