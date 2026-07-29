@@ -81,8 +81,8 @@ func GetTracks(c *fiber.Ctx) error {
 	}
 
 	if q := strings.TrimSpace(c.Query("q")); q != "" {
-		like := "%" + q + "%"
-		query = query.Where("name ILIKE ? OR description ILIKE ?", like, like)
+		like := "%" + strings.ToLower(q) + "%"
+		query = query.Where("LOWER(name) LIKE ? OR LOWER(description) LIKE ?", like, like)
 	}
 
 	var tracks []models.Track

@@ -3,7 +3,6 @@
 	import { fade, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { API_BASE_URL } from '$lib/config';
-	import { readJson } from '$lib/api';
 
 	const formId = 'student-login';
 
@@ -25,7 +24,8 @@
 	let captchaLoading = $state(false);
 
 	// Forgot Password / Reset Password states
-	let viewState = $state<'login' | 'forgot' | 'reset'>('login');
+	let viewState = $state<'login' | 'forgot' | 'reset' | 'verify_otp'>('login');
+	let verifyOtpCode = $state('');
 	let forgotEmail = $state('');
 	let forgotOtp = $state('');
 	let forgotNewPassword = $state('');
@@ -84,19 +84,14 @@
 		captchaLoading = true;
 		try {
 			const response = await fetch(`${API_BASE_URL}/api/auth/captcha`);
-			const data = await readJson(response);
-			captchaID = String(data.captcha_id ?? '');
-			captchaQuestion = String(data.question ?? '');
-			captchaAnswer = '';
+			if (response.ok) {
+				const data = await response.json();
+				captchaID = data.captcha_id;
+				captchaQuestion = data.question;
+				captchaAnswer = '';
+			}
 		} catch (err) {
-			// Surface the failure: a blank captcha box with no explanation looks
-			// like a broken refresh button rather than an unreachable API.
-			captchaQuestion = '';
-			captchaID = '';
-			errorMsg =
-				err instanceof Error
-					? `Could not load the security check. ${err.message}`
-					: 'Could not load the security check. Please try again.';
+			console.error('Error fetching captcha:', err);
 		} finally {
 			captchaLoading = false;
 		}
@@ -106,40 +101,6 @@
 	$effect(() => {
 		fetchCaptcha();
 	});
-
-	// ── Account verification (unverified account signing in) ───────────────────
-	let needsVerification = $state(false);
-	let verifyEmail = $state('');
-	let verifyCode = $state('');
-
-	async function handleVerifySubmit(event: SubmitEvent) {
-		event.preventDefault();
-		if (verifyCode.trim() === '') return;
-
-		submitting = true;
-		errorMsg = '';
-		try {
-			const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: verifyEmail, code: verifyCode.trim() })
-			});
-			const data = await readJson(response);
-			if (!response.ok) {
-				throw new Error(String(data.error || 'Invalid or expired code'));
-			}
-			if (data.access_token) {
-				localStorage.setItem('access_token', String(data.access_token));
-			}
-			needsVerification = false;
-			loginSuccess = true;
-			setTimeout(() => goto('/portal'), 1200);
-		} catch (err) {
-			errorMsg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
-		} finally {
-			submitting = false;
-		}
-	}
 
 	// Submit Handler
 	async function handleSubmit(event: SubmitEvent) {
@@ -163,25 +124,21 @@
 				})
 			});
 
-			const data = await readJson(response);
-
-			// 403 means the account exists but was never verified. The API has
-			// just emailed a fresh 6-digit code, so show the entry box here
-			// instead of leaving the user with a message and nowhere to type it.
-			if (response.status === 403 && data.email) {
-				verifyEmail = String(data.email);
-				needsVerification = true;
-				verifyCode = '';
-				errorMsg = '';
-				return;
-			}
+			const data = await response.json();
 
 			if (!response.ok) {
-				throw new Error(String(data.error || 'Invalid credentials'));
+				if (response.status === 403 && data.email) {
+					email = data.email;
+					viewState = 'verify_otp';
+					verifyOtpCode = '';
+					errorMsg = data.error || 'Account not verified. A verification code has been sent.';
+					return;
+				}
+				throw new Error(data.error || 'Invalid credentials');
 			}
 
 			if (data.access_token) {
-				localStorage.setItem('access_token', String(data.access_token));
+				localStorage.setItem('access_token', data.access_token);
 			}
 			loginSuccess = true;
 			setTimeout(() => {
@@ -192,6 +149,47 @@
 				err instanceof Error ? err.message : 'Failed to login. Please check your credentials.';
 			// Refresh captcha on login failure
 			fetchCaptcha();
+		} finally {
+			submitting = false;
+		}
+	}
+
+	// Handle OTP verification for first login / unverified student
+	async function handleVerifyRegistrationOtp(event: SubmitEvent) {
+		event.preventDefault();
+		if (verifyOtpCode.trim() === '') return;
+
+		submitting = true;
+		errorMsg = '';
+
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					email: email.trim(),
+					code: verifyOtpCode.trim()
+				})
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Invalid OTP code');
+			}
+
+			// On successful verification, the API logs the user in and returns details
+			if (data.access_token) {
+				localStorage.setItem('access_token', data.access_token);
+			}
+			loginSuccess = true;
+			setTimeout(() => {
+				goto('/portal');
+			}, 1500);
+		} catch (err) {
+			errorMsg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
 		} finally {
 			submitting = false;
 		}
@@ -420,33 +418,32 @@
 					</a>
 				</div>
 			</div>
-		{:else if needsVerification}
-			<!-- Account verification: the account exists but was never verified,
-			     and the API has just emailed a fresh 6-digit code. -->
+		{:else if viewState === 'verify_otp'}
+			<!-- Account Verification OTP View -->
 			<div class="p-6 sm:p-8 border-b border-border-base bg-slate-50/50">
 				<div class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
 					STUDENT PORTAL
 				</div>
 				<h2 class="text-2xl font-bold text-inst-navy font-serif leading-tight mt-1">
-					Verify Your Email
+					Verify Your Account
 				</h2>
 				<p class="text-slate-500 text-xs mt-1">
-					This account has not been verified yet. We have emailed a 6-digit verification code to
-					<span class="font-semibold text-slate-700">{verifyEmail}</span>. Enter it below — there is
-					no link to click.
+					Your student account requires verification. Please enter the OTP code sent to your email ({email}).
 				</p>
 			</div>
 
-			<form onsubmit={handleVerifySubmit} class="p-6 sm:p-8 flex flex-col gap-6">
+			<form onsubmit={handleVerifyRegistrationOtp} class="p-6 sm:p-8 flex flex-col gap-6">
 				{#if errorMsg}
 					<div
 						class="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg"
+						transition:slide={{ duration: 200 }}
 					>
 						{errorMsg}
 					</div>
 				{/if}
 
-				<div class="flex flex-col gap-2">
+				<!-- OTP Code -->
+				<div class="flex flex-col gap-1.5">
 					<label
 						for="{formId}-verify-otp"
 						class="text-[11px] font-bold text-slate-700 tracking-wider"
@@ -456,36 +453,35 @@
 					<input
 						id="{formId}-verify-otp"
 						type="text"
-						inputmode="numeric"
-						autocomplete="one-time-code"
-						maxlength="6"
-						bind:value={verifyCode}
-						placeholder="Enter the 6-digit code"
-						class="w-full px-4 py-3 border border-border-base rounded-lg text-sm tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-inst-navy/20 focus:border-inst-navy"
+						bind:value={verifyOtpCode}
+						placeholder="Enter Code"
+						class="w-full px-3.5 py-2.5 bg-white rounded-lg border border-border-base text-center tracking-widest text-[15px] font-bold text-slate-800 placeholder:text-slate-400 placeholder:tracking-normal focus:outline-none focus:border-inst-navy focus:ring-2 focus:ring-inst-navy/10 transition-all duration-200"
+						required
 					/>
-					<p class="text-[10px] text-slate-400">
-						The code expires in 15 minutes. Check your spam folder if it has not arrived.
-					</p>
 				</div>
 
-				<div class="flex items-center gap-3">
-					<button
-						type="submit"
-						disabled={submitting || verifyCode.trim() === ''}
-						class="flex-1 py-3 bg-inst-navy text-white text-xs font-bold rounded-lg hover:bg-inst-navy/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-					>
-						{submitting ? 'Verifying…' : 'Verify and Continue'}
-					</button>
+				<button
+					type="submit"
+					disabled={submitting || verifyOtpCode.trim() === ''}
+					class="w-full py-3 bg-inst-navy hover:bg-inst-navy/95 active:bg-inst-navy/90 text-white font-bold text-xs tracking-wider uppercase rounded-xl shadow-xs transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+				>
+					{#if submitting}
+						Verifying...
+					{:else}
+						Verify &amp; Log In
+					{/if}
+				</button>
+
+				<div class="flex justify-center items-center text-xs mt-2">
 					<button
 						type="button"
 						onclick={() => {
-							needsVerification = false;
+							viewState = 'login';
 							errorMsg = '';
-							fetchCaptcha();
 						}}
-						class="px-4 py-3 text-xs font-bold text-slate-500 border border-border-base rounded-lg hover:bg-slate-50 transition-colors"
+						class="text-slate-500 hover:text-slate-800 font-semibold transition duration-200"
 					>
-						Back
+						← Back to Login
 					</button>
 				</div>
 			</form>

@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/iips-oss/ispark/api/config"
@@ -24,11 +26,13 @@ var allowedSettingStatuses = map[string]bool{
 // platformUser is the flattened shape the super admin user registry renders.
 // Students and admins are different tables, so they are normalised here.
 type platformUser struct {
-	Name   string `json:"name"`
-	ID     string `json:"id"`
-	Role   string `json:"role"`
-	Dept   string `json:"dept"`
-	Status string `json:"status"`
+	Name     string `json:"name"`
+	ID       string `json:"id"`
+	Role     string `json:"role"`
+	Dept     string `json:"dept"`
+	Status   string `json:"status"`
+	Email    string `json:"email,omitempty"`
+	Semester int    `json:"semester,omitempty"`
 }
 
 // createPlatformUserInput is what the super admin "Create User" form submits.
@@ -74,6 +78,7 @@ func GetPlatformStats(c *fiber.Ctx) error {
 		{model: &models.Activity{}, into: &totalActivities},
 		{model: &models.Certificate{}, into: &totalCertificates},
 		{model: &models.Certificate{}, where: "status = ?", args: []any{"Pending"}, into: &pendingCertificates},
+		{model: &models.Track{}, where: "status = ?", args: []any{"Active"}, into: &activeTracks},
 	}
 
 	for _, count := range counts {
@@ -86,16 +91,6 @@ func GetPlatformStats(c *fiber.Ctx) error {
 				"error": "Failed to load platform statistics",
 			})
 		}
-	}
-
-	// A track is an activity category, so the number of distinct categories in
-	// use is the number of active tracks.
-	if err := config.DB.Model(&models.Activity{}).
-		Distinct("category").
-		Count(&activeTracks).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load platform statistics",
-		})
 	}
 
 	return c.JSON(fiber.Map{
@@ -114,7 +109,7 @@ func GetPlatformStats(c *fiber.Ctx) error {
 func GetPlatformUsers(c *fiber.Ctx) error {
 	var students []models.Student
 	if err := config.DB.
-		Select("roll_no", "name", "course_name", "is_verified").
+		Select("roll_no", "name", "course_name", "email_id", "semester", "is_verified", "status").
 		Order("created_at desc").
 		Find(&students).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -124,7 +119,7 @@ func GetPlatformUsers(c *fiber.Ctx) error {
 
 	var admins []models.Admin
 	if err := config.DB.
-		Select("admin_id", "name", "role", "assigned_batch").
+		Select("admin_id", "name", "role", "email", "assigned_batch", "status").
 		Order("created_at desc").
 		Find(&admins).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -145,27 +140,39 @@ func GetPlatformUsers(c *fiber.Ctx) error {
 			role = "Super Admin"
 		}
 
+		adminStatus := admin.Status
+		if adminStatus == "" {
+			adminStatus = "Active"
+		}
+
 		users = append(users, platformUser{
-			Name:   admin.Name,
-			ID:     admin.AdminID,
-			Role:   role,
-			Dept:   dept,
-			Status: "Active",
+			Name:     admin.Name,
+			ID:       admin.AdminID,
+			Role:     role,
+			Dept:     dept,
+			Status:   adminStatus,
+			Email:    admin.Email,
+			Semester: 0,
 		})
 	}
 
 	for _, student := range students {
-		status := "Pending"
-		if student.IsVerified {
-			status = "Active"
+		status := student.Status
+		if status == "" {
+			status = "Pending"
+			if student.IsVerified {
+				status = "Active"
+			}
 		}
 
 		users = append(users, platformUser{
-			Name:   student.Name,
-			ID:     student.RollNo,
-			Role:   "Student",
-			Dept:   student.CourseName,
-			Status: status,
+			Name:     student.Name,
+			ID:       student.RollNo,
+			Role:     "Student",
+			Dept:     student.CourseName,
+			Status:   status,
+			Email:    student.EmailID,
+			Semester: student.Semester,
 		})
 	}
 
@@ -183,7 +190,7 @@ func CreatePlatformUser(c *fiber.Ctx) error {
 
 	input.Name = strings.TrimSpace(input.Name)
 	input.ID = strings.TrimSpace(input.ID)
-	input.Email = strings.TrimSpace(input.Email)
+	input.Email = utils.NormalizeEmail(input.Email)
 	input.Dept = strings.TrimSpace(input.Dept)
 
 	if input.Name == "" || input.ID == "" || input.Email == "" {
@@ -192,10 +199,38 @@ func CreatePlatformUser(c *fiber.Ctx) error {
 		})
 	}
 
+	if !utils.ValidateEmail(input.Email) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid email address format",
+		})
+	}
+
 	if input.Role != "Student" && input.Role != "Admin" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Role must be either Student or Admin",
 		})
+	}
+
+	// Preemptive uniqueness check
+	var count int64
+	// Check Student RollNo / AdminID
+	config.DB.Model(&models.Student{}).Where("roll_no = ?", input.ID).Count(&count)
+	if count > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A student with this roll number already exists"})
+	}
+	config.DB.Model(&models.Admin{}).Where("admin_id = ?", input.ID).Count(&count)
+	if count > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An admin with this ID already exists"})
+	}
+
+	// Check Student Email / Admin Email (case-insensitive checks)
+	config.DB.Model(&models.Student{}).Where("LOWER(email_id) = ?", input.Email).Count(&count)
+	if count > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A student with this email already exists"})
+	}
+	config.DB.Model(&models.Admin{}).Where("LOWER(email) = ?", input.Email).Count(&count)
+	if count > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An admin with this email already exists"})
 	}
 
 	tempPassword, err := generateTemporaryPassword()
@@ -228,14 +263,13 @@ func CreatePlatformUser(c *fiber.Ctx) error {
 			EmailID:      input.Email,
 			EnrollmentNo: "EN-" + input.ID,
 			Password:     hashed,
-			// The account still has to verify its email, so it shows as Pending
-			// in the registry until the student completes OTP verification.
-			IsVerified: false,
+			IsVerified:   false,
+			Status:       "Pending",
 		}
 
 		if err := config.DB.Create(&student).Error; err != nil {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "A student with this roll number, email or enrollment number already exists",
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to create student account",
 			})
 		}
 
@@ -255,11 +289,12 @@ func CreatePlatformUser(c *fiber.Ctx) error {
 			Role:               "admin",
 			AssignedBatch:      input.Dept,
 			MustChangePassword: true,
+			Status:             "Active",
 		}
 
 		if err := config.DB.Create(&admin).Error; err != nil {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "An admin with this ID or email already exists",
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to create admin account",
 			})
 		}
 
@@ -273,7 +308,7 @@ func CreatePlatformUser(c *fiber.Ctx) error {
 			ID:     admin.AdminID,
 			Role:   "Admin",
 			Dept:   dept,
-			Status: "Active",
+			Status: admin.Status,
 		}
 	}
 
@@ -327,11 +362,25 @@ func DeletePlatformUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	if err := config.DB.Delete(&student).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete user",
-		})
+	tx := config.DB.Begin()
+	// Delete related OTPs, enrollments, certificates
+	if err := tx.Where("email = ?", student.EmailID).Delete(&models.OTP{}).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete student OTPs"})
 	}
+	if err := tx.Where("student_roll_no = ?", student.RollNo).Delete(&models.Enrollment{}).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete student enrollments"})
+	}
+	if err := tx.Where("student_roll_no = ?", student.RollNo).Delete(&models.Certificate{}).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete student certificates"})
+	}
+	if err := tx.Delete(&student).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete student"})
+	}
+	tx.Commit()
 
 	return c.JSON(fiber.Map{"message": "User deleted successfully"})
 }
@@ -476,4 +525,520 @@ func UpdatePlatformSettings(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"settings": grouped})
+}
+
+// ---------------------------------------------------------------------------
+// Activity Management
+// ---------------------------------------------------------------------------
+
+// platformActivity represents the shape the super admin activity management renders.
+type platformActivity struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Track        string `json:"track"` // "Personality Development" or "Skill Building"
+	Type         string `json:"type"`  // "Workshop", "Seminar", "Webinar", "Course"
+	Credits      int    `json:"credits"`
+	Status       string `json:"status"` // "Active" or "Inactive"
+	Category     string `json:"category"`
+	Description  string `json:"description"`
+	Mode         string `json:"mode"`
+	RegDeadline  string `json:"reg_deadline"`
+	ActivityDate string `json:"activity_date"`
+	Venue        string `json:"venue"`
+	Coordinator  string `json:"coordinator"`
+}
+
+// createActivityInput represents the body submitted by Svelte.
+type createActivityInput struct {
+	Name         string `json:"name"`
+	Track        string `json:"track"`
+	Type         string `json:"type"`
+	Credits      *int   `json:"credits"`
+	Status       string `json:"status"`
+	Category     string `json:"category"`
+	Description  string `json:"description"`
+	Mode         string `json:"mode"`
+	RegDeadline  string `json:"reg_deadline"`
+	ActivityDate string `json:"activity_date"`
+	Venue        string `json:"venue"`
+	Coordinator  string `json:"coordinator"`
+}
+
+func parseActivityID(str string) uint {
+	clean := strings.TrimPrefix(str, "ACT")
+	id, err := strconv.Atoi(clean)
+	if err != nil {
+		return 0
+	}
+	return uint(id)
+}
+
+// GetPlatformActivities fetches all registered activities for superadmin management.
+func GetPlatformActivities(c *fiber.Ctx) error {
+	var activities []models.Activity
+	if err := config.DB.Preload("Track").Order("created_at desc").Find(&activities).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to load activities",
+		})
+	}
+
+	res := make([]platformActivity, 0, len(activities))
+	for _, act := range activities {
+		track := act.Track.Name
+		if track == "" {
+			track = "Personality Development"
+			catUpper := strings.ToUpper(act.Category)
+			if catUpper == "TECHNICAL" || catUpper == "RESEARCH" || catUpper == "SPORTS" || catUpper == "CULTURAL" {
+				track = "Skill Building"
+			}
+		}
+
+		actType := act.Type
+		if actType == "" {
+			actType = "Workshop"
+			catUpper := strings.ToUpper(act.Category)
+			if act.Mode == "Online" {
+				actType = "Course"
+			} else if catUpper == "PUBLIC SPEAKING" || catUpper == "LEADERSHIP" {
+				actType = "Seminar"
+			}
+		}
+
+		// Map backend Status to frontend Status
+		status := "Inactive"
+		if act.Status == "Open" || act.Status == "Closing Soon" || act.Status == "Active" {
+			status = "Active"
+		}
+
+		// Formatted deadlines and activity dates
+		regDeadlineStr := ""
+		if !act.RegDeadline.IsZero() {
+			regDeadlineStr = act.RegDeadline.Format("2006-01-02")
+		}
+		activityDateStr := ""
+		if !act.ActivityDate.IsZero() {
+			activityDateStr = act.ActivityDate.Format("2006-01-02")
+		}
+
+		res = append(res, platformActivity{
+			ID:           fmt.Sprintf("ACT%03d", act.ID),
+			Name:         act.Name,
+			Track:        track,
+			Type:         actType,
+			Credits:      act.Credits,
+			Status:       status,
+			Category:     act.Category,
+			Description:  act.Description,
+			Mode:         act.Mode,
+			RegDeadline:  regDeadlineStr,
+			ActivityDate: activityDateStr,
+			Venue:        act.Venue,
+			Coordinator:  act.Coordinator,
+		})
+	}
+
+	return c.JSON(fiber.Map{"activities": res})
+}
+
+// CreatePlatformActivity registers a new activity.
+func CreatePlatformActivity(c *fiber.Ctx) error {
+	var input createActivityInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
+	}
+
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Activity name is required"})
+	}
+
+	status := "Closed"
+	if input.Status == "Active" {
+		status = "Open"
+	}
+
+	var regDeadline time.Time
+	if input.RegDeadline != "" {
+		t, err := time.Parse("2006-01-02", input.RegDeadline)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid registration deadline format. Must be YYYY-MM-DD"})
+		}
+		regDeadline = t
+	} else {
+		regDeadline = time.Now().AddDate(0, 0, 7)
+	}
+
+	var activityDate time.Time
+	if input.ActivityDate != "" {
+		t, err := time.Parse("2006-01-02", input.ActivityDate)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid activity date format. Must be YYYY-MM-DD"})
+		}
+		activityDate = t
+	} else {
+		activityDate = time.Now().AddDate(0, 0, 14)
+	}
+
+	if !regDeadline.IsZero() && !activityDate.IsZero() && regDeadline.After(activityDate) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Registration deadline must be on or before the activity date"})
+	}
+
+	credits := 0
+	if input.Credits != nil {
+		credits = *input.Credits
+	}
+
+	var trackRecord models.Track
+	trackName := strings.TrimSpace(input.Track)
+	if trackName == "" {
+		trackName = "Personality Development"
+		catUpper := strings.ToUpper(input.Category)
+		if catUpper == "TECHNICAL" || catUpper == "RESEARCH" || catUpper == "SPORTS" || catUpper == "CULTURAL" {
+			trackName = "Skill Building"
+		}
+	}
+
+	if err := config.DB.Where("LOWER(name) = LOWER(?)", trackName).First(&trackRecord).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Track '%s' does not exist", trackName)})
+	}
+
+	act := models.Activity{
+		Name:         input.Name,
+		Category:     input.Category,
+		TrackID:      &trackRecord.ID,
+		Type:         input.Type,
+		Description:  input.Description,
+		Credits:      credits,
+		Mode:         input.Mode,
+		RegDeadline:  regDeadline,
+		ActivityDate: activityDate,
+		Venue:        input.Venue,
+		Coordinator:  input.Coordinator,
+		Status:       status,
+	}
+
+	if err := config.DB.Create(&act).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create activity"})
+	}
+
+	regDeadlineStr := ""
+	if !act.RegDeadline.IsZero() {
+		regDeadlineStr = act.RegDeadline.Format("2006-01-02")
+	}
+	activityDateStr := ""
+	if !act.ActivityDate.IsZero() {
+		activityDateStr = act.ActivityDate.Format("2006-01-02")
+	}
+
+	frontStatus := "Inactive"
+	if act.Status == "Open" || act.Status == "Closing Soon" || act.Status == "Active" {
+		frontStatus = "Active"
+	}
+
+	created := platformActivity{
+		ID:           fmt.Sprintf("ACT%03d", act.ID),
+		Name:         act.Name,
+		Track:        trackRecord.Name,
+		Type:         act.Type,
+		Credits:      act.Credits,
+		Status:       frontStatus,
+		Category:     act.Category,
+		Description:  act.Description,
+		Mode:         act.Mode,
+		RegDeadline:  regDeadlineStr,
+		ActivityDate: activityDateStr,
+		Venue:        act.Venue,
+		Coordinator:  act.Coordinator,
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"activity": created})
+}
+
+// UpdatePlatformActivity updates an existing activity.
+func UpdatePlatformActivity(c *fiber.Ctx) error {
+	rawID := c.Params("id")
+	id := parseActivityID(rawID)
+	if id == 0 {
+		if val, err := strconv.Atoi(rawID); err == nil {
+			id = uint(val)
+		}
+	}
+
+	if id == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid activity ID"})
+	}
+
+	var act models.Activity
+	if err := config.DB.Preload("Track").First(&act, id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Activity not found"})
+	}
+
+	var input createActivityInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
+	}
+
+	if input.Name != "" {
+		act.Name = strings.TrimSpace(input.Name)
+	}
+	if input.Category != "" {
+		act.Category = input.Category
+	}
+
+	var trackRecord models.Track
+	resTrackName := act.Track.Name
+	if strings.TrimSpace(input.Track) != "" {
+		trackName := strings.TrimSpace(input.Track)
+		if err := config.DB.Where("LOWER(name) = LOWER(?)", trackName).First(&trackRecord).Error; err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Track '%s' does not exist", trackName)})
+		}
+		act.TrackID = &trackRecord.ID
+		resTrackName = trackRecord.Name
+	}
+
+	if input.Type != "" {
+		act.Type = input.Type
+	}
+	if input.Description != "" {
+		act.Description = input.Description
+	}
+	if input.Mode != "" {
+		act.Mode = input.Mode
+	}
+	newRegDeadline := act.RegDeadline
+	newActivityDate := act.ActivityDate
+
+	if input.RegDeadline != "" {
+		t, err := time.Parse("2006-01-02", input.RegDeadline)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid registration deadline format. Must be YYYY-MM-DD"})
+		}
+		newRegDeadline = t
+	}
+	if input.ActivityDate != "" {
+		t, err := time.Parse("2006-01-02", input.ActivityDate)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid activity date format. Must be YYYY-MM-DD"})
+		}
+		newActivityDate = t
+	}
+
+	if !newRegDeadline.IsZero() && !newActivityDate.IsZero() && newRegDeadline.After(newActivityDate) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Registration deadline must be on or before the activity date"})
+	}
+
+	act.RegDeadline = newRegDeadline
+	act.ActivityDate = newActivityDate
+	if input.Venue != "" {
+		act.Venue = input.Venue
+	}
+	if input.Coordinator != "" {
+		act.Coordinator = input.Coordinator
+	}
+	if input.Status != "" {
+		if input.Status == "Active" {
+			act.Status = "Open"
+		} else {
+			act.Status = "Closed"
+		}
+	}
+	if input.Credits != nil {
+		act.Credits = *input.Credits
+	}
+
+	if err := config.DB.Save(&act).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update activity"})
+	}
+
+	regDeadlineStr := ""
+	if !act.RegDeadline.IsZero() {
+		regDeadlineStr = act.RegDeadline.Format("2006-01-02")
+	}
+	activityDateStr := ""
+	if !act.ActivityDate.IsZero() {
+		activityDateStr = act.ActivityDate.Format("2006-01-02")
+	}
+
+	frontStatus := "Inactive"
+	if act.Status == "Open" || act.Status == "Closing Soon" || act.Status == "Active" {
+		frontStatus = "Active"
+	}
+
+	if resTrackName == "" {
+		if act.TrackID != nil && *act.TrackID != 0 {
+			var t models.Track
+			if err := config.DB.First(&t, *act.TrackID).Error; err == nil {
+				resTrackName = t.Name
+			}
+		}
+	}
+
+	updated := platformActivity{
+		ID:           fmt.Sprintf("ACT%03d", act.ID),
+		Name:         act.Name,
+		Track:        resTrackName,
+		Type:         act.Type,
+		Credits:      act.Credits,
+		Status:       frontStatus,
+		Category:     act.Category,
+		Description:  act.Description,
+		Mode:         act.Mode,
+		RegDeadline:  regDeadlineStr,
+		ActivityDate: activityDateStr,
+		Venue:        act.Venue,
+		Coordinator:  act.Coordinator,
+	}
+
+	return c.JSON(fiber.Map{"activity": updated})
+}
+
+// DeletePlatformActivity removes an activity.
+func DeletePlatformActivity(c *fiber.Ctx) error {
+	rawID := c.Params("id")
+	id := parseActivityID(rawID)
+	if id == 0 {
+		if val, err := strconv.Atoi(rawID); err == nil {
+			id = uint(val)
+		}
+	}
+
+	if id == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid activity ID"})
+	}
+
+	var act models.Activity
+	if err := config.DB.First(&act, id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Activity not found"})
+	}
+
+	tx := config.DB.Begin()
+	// Cascade delete related enrollments
+	if err := tx.Where("activity_id = ?", act.ID).Delete(&models.Enrollment{}).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete activity enrollments"})
+	}
+	if err := tx.Delete(&act).Error; err != nil {
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete activity"})
+	}
+	tx.Commit()
+
+	return c.JSON(fiber.Map{"message": "Activity deleted successfully"})
+}
+
+// ---------------------------------------------------------------------------
+// User Management
+// ---------------------------------------------------------------------------
+
+type updatePlatformUserInput struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Dept     string `json:"dept"`
+	Semester int    `json:"semester"`
+	Status   string `json:"status"` // Active, Inactive, Pending
+}
+
+// UpdatePlatformUser edits student or admin details.
+func UpdatePlatformUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "User ID is required"})
+	}
+
+	var input updatePlatformUserInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot parse request body"})
+	}
+
+	// First try to check if the user is an Admin
+	var admin models.Admin
+	err := config.DB.Where("admin_id = ?", id).First(&admin).Error
+	if err == nil {
+		if input.Name != "" {
+			admin.Name = input.Name
+		}
+		if input.Email != "" {
+			input.Email = utils.NormalizeEmail(input.Email)
+			if !utils.ValidateEmail(input.Email) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid email address format"})
+			}
+			var count int64
+			config.DB.Model(&models.Admin{}).Where("LOWER(email) = ? AND admin_id != ?", input.Email, admin.AdminID).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An admin with this email already exists"})
+			}
+			config.DB.Model(&models.Student{}).Where("LOWER(email_id) = ?", input.Email).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A student with this email already exists"})
+			}
+			admin.Email = input.Email
+		}
+		if input.Dept != "" {
+			admin.AssignedBatch = input.Dept
+		}
+		if input.Status != "" {
+			if input.Status != "Active" && input.Status != "Inactive" {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Status must be either Active or Inactive",
+				})
+			}
+			admin.Status = input.Status
+		}
+
+		if err := config.DB.Save(&admin).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update admin"})
+		}
+
+		return c.JSON(fiber.Map{"message": "Admin updated successfully"})
+	}
+
+	// If not an admin, try Student
+	var student models.Student
+	err = config.DB.Where("roll_no = ?", id).First(&student).Error
+	if err == nil {
+		if input.Name != "" {
+			student.Name = input.Name
+		}
+		if input.Email != "" {
+			input.Email = utils.NormalizeEmail(input.Email)
+			if !utils.ValidateEmail(input.Email) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid email address format"})
+			}
+			var count int64
+			config.DB.Model(&models.Student{}).Where("LOWER(email_id) = ? AND roll_no != ?", input.Email, student.RollNo).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A student with this email already exists"})
+			}
+			config.DB.Model(&models.Admin{}).Where("LOWER(email) = ?", input.Email).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An admin with this email already exists"})
+			}
+			student.EmailID = input.Email
+		}
+		if input.Dept != "" {
+			student.CourseName = input.Dept
+		}
+		if input.Semester > 0 {
+			student.Semester = input.Semester
+		}
+
+		// Map Status to IsVerified
+		if input.Status != "" {
+			if input.Status != "Active" && input.Status != "Inactive" && input.Status != "Pending" {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Status must be Active, Inactive or Pending",
+				})
+			}
+			student.Status = input.Status
+			student.IsVerified = (input.Status == "Active")
+		}
+
+		if err := config.DB.Save(&student).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update student"})
+		}
+
+		return c.JSON(fiber.Map{"message": "Student updated successfully"})
+	}
+
+	return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
 }

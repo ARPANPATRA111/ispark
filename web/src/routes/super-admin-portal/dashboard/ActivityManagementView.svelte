@@ -2,9 +2,14 @@
 	import { fade, slide } from 'svelte/transition';
 
 	// ── Types ───────────────────────────────────────────────────────────────────
-	type Track = 'Personality Development' | 'Skill Building';
+	type Track = string;
 	type ActivityType = 'Workshop' | 'Seminar' | 'Webinar' | 'Course';
 	type ActivityStatus = 'Active' | 'Inactive';
+
+	interface TrackOption {
+		id: number;
+		name: string;
+	}
 
 	interface Activity {
 		id: string;
@@ -13,93 +18,19 @@
 		type: ActivityType;
 		credits: number;
 		status: ActivityStatus;
+		category?: string;
+		description?: string;
+		mode?: string;
+		reg_deadline?: string;
+		activity_date?: string;
+		venue?: string;
+		coordinator?: string;
 	}
 
-	// ── Mock Activity Data ──────────────────────────────────────────────────────
-	let activities = $state<Activity[]>([
-		{
-			id: 'ACT001',
-			name: 'Public Speaking Workshop',
-			track: 'Personality Development',
-			type: 'Workshop',
-			credits: 3,
-			status: 'Active'
-		},
-		{
-			id: 'ACT002',
-			name: 'Python for Beginners',
-			track: 'Skill Building',
-			type: 'Course',
-			credits: 5,
-			status: 'Active'
-		},
-		{
-			id: 'ACT003',
-			name: 'Leadership Essentials',
-			track: 'Personality Development',
-			type: 'Seminar',
-			credits: 2,
-			status: 'Active'
-		},
-		{
-			id: 'ACT004',
-			name: 'Data Analysis with Excel',
-			track: 'Skill Building',
-			type: 'Course',
-			credits: 4,
-			status: 'Active'
-		},
-		{
-			id: 'ACT005',
-			name: 'Emotional Intelligence',
-			track: 'Personality Development',
-			type: 'Webinar',
-			credits: 2,
-			status: 'Inactive'
-		},
-		{
-			id: 'ACT006',
-			name: 'Web Development Fundamentals',
-			track: 'Skill Building',
-			type: 'Course',
-			credits: 6,
-			status: 'Active'
-		},
-		{
-			id: 'ACT007',
-			name: 'Time Management Mastery',
-			track: 'Personality Development',
-			type: 'Workshop',
-			credits: 2,
-			status: 'Active'
-		},
-		{
-			id: 'ACT008',
-			name: 'Machine Learning Basics',
-			track: 'Skill Building',
-			type: 'Course',
-			credits: 5,
-			status: 'Inactive'
-		},
-		{
-			id: 'ACT009',
-			name: 'Conflict Resolution',
-			track: 'Personality Development',
-			type: 'Seminar',
-			credits: 3,
-			status: 'Active'
-		},
-		{
-			id: 'ACT010',
-			name: 'Digital Marketing Strategy',
-			track: 'Skill Building',
-			type: 'Course',
-			credits: 4,
-			status: 'Active'
-		}
-	]);
+	import { API_BASE_URL } from '$lib/config';
 
-	let activityCounter = 11;
+	let activities = $state<Activity[]>([]);
+	let availableTracks = $state<TrackOption[]>([]);
 
 	// ── Credit Rules ────────────────────────────────────────────────────────────
 	let creditRules = $state<Record<ActivityType, number>>({
@@ -109,9 +40,52 @@
 		Course: 4
 	});
 
+	async function loadActivities() {
+		try {
+			const token = localStorage.getItem('superadmin_token') || '';
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/activities`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (res.ok) {
+				const data = await res.json();
+				activities = data.activities || [];
+			} else {
+				triggerToast('Failed to load activities');
+			}
+		} catch (err) {
+			console.error(err);
+			triggerToast('Network error while loading activities');
+		}
+	}
+
+	async function loadTracks() {
+		try {
+			const token = localStorage.getItem('superadmin_token') || '';
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/tracks`, {
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+			if (res.ok) {
+				const data = await res.json();
+				availableTracks = data.tracks || [];
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
+
+	$effect(() => {
+		loadActivities();
+		loadTracks();
+	});
+
 	// ── Filters / Search / Pagination ───────────────────────────────────────────
-	type FilterTab = 'All' | 'Personality Development' | 'Skill Building' | 'Active' | 'Inactive';
+	type FilterTab = string;
 	let activeFilter = $state<FilterTab>('All');
+	let filterTabs = $derived(['All', ...availableTracks.map((t) => t.name), 'Active', 'Inactive']);
 	let searchQuery = $state('');
 	let currentPage = $state(1);
 	const pageSize = 10;
@@ -174,24 +148,46 @@
 	}
 
 	// ── Add / Edit Activity Modal ────────────────────────────────────────────────
-	let isActivityModalOpen = $state(false);
+	let {
+		isActivityModalOpen = $bindable(false)
+	}: {
+		isActivityModalOpen?: boolean;
+	} = $props();
 	let modalMode = $state<'add' | 'edit'>('add');
 	let editingId = $state<string | null>(null);
 
 	let formName = $state('');
-	let formTrack = $state<Track>('Personality Development');
+	let formTrack = $state<Track>('');
+	let userSelectedTrack = $state(false);
 	let formType = $state<ActivityType>('Workshop');
 	let formCredits = $state(2);
 	let formStatus = $state<ActivityStatus>('Active');
+
+	let formCategory = $state('TECHNICAL');
+	let formDescription = $state('');
+	let formMode = $state('Offline');
+	let formRegDeadline = $state('');
+	let formActivityDate = $state('');
+	let formVenue = $state('');
+	let formCoordinator = $state('');
 
 	function openAddActivity() {
 		modalMode = 'add';
 		editingId = null;
 		formName = '';
-		formTrack = 'Personality Development';
+		formTrack = availableTracks[0]?.name || '';
+		userSelectedTrack = false;
 		formType = 'Workshop';
 		formCredits = creditRules['Workshop'];
 		formStatus = 'Active';
+		formCategory = 'TECHNICAL';
+		formDescription = '';
+		formMode = 'Offline';
+		const today = new Date().toISOString().split('T')[0];
+		formRegDeadline = today;
+		formActivityDate = today;
+		formVenue = '';
+		formCoordinator = '';
 		isActivityModalOpen = true;
 	}
 
@@ -199,10 +195,22 @@
 		modalMode = 'edit';
 		editingId = activity.id;
 		formName = activity.name;
-		formTrack = activity.track;
 		formType = activity.type;
 		formCredits = activity.credits;
 		formStatus = activity.status;
+		formCategory = activity.category || 'TECHNICAL';
+		formTrack = activity.track || (availableTracks[0]?.name ?? '');
+		userSelectedTrack = true;
+		formDescription = activity.description || '';
+		formMode = activity.mode || 'Offline';
+		formRegDeadline = activity.reg_deadline
+			? new Date(activity.reg_deadline).toISOString().split('T')[0]
+			: '';
+		formActivityDate = activity.activity_date
+			? new Date(activity.activity_date).toISOString().split('T')[0]
+			: '';
+		formVenue = activity.venue || '';
+		formCoordinator = activity.coordinator || '';
 		isActivityModalOpen = true;
 	}
 
@@ -210,53 +218,154 @@
 		formCredits = creditRules[formType];
 	}
 
-	function handleSaveActivity(e: Event) {
+	function syncTrackToCategory() {
+		if (userSelectedTrack) return;
+		const cat = formCategory.toUpperCase();
+		if (cat === 'TECHNICAL' || cat === 'RESEARCH' || cat === 'SPORTS' || cat === 'CULTURAL') {
+			if (availableTracks.some((t) => t.name === 'Skill Building')) {
+				formTrack = 'Skill Building';
+			}
+		} else {
+			if (availableTracks.some((t) => t.name === 'Personality Development')) {
+				formTrack = 'Personality Development';
+			}
+		}
+	}
+
+	async function handleSaveActivity(e: Event) {
 		e.preventDefault();
 		if (!formName.trim()) return;
 
-		if (modalMode === 'add') {
-			const newActivity: Activity = {
-				id: `ACT${String(activityCounter++).padStart(3, '0')}`,
-				name: formName.trim(),
-				track: formTrack,
-				type: formType,
-				credits: formCredits,
-				status: formStatus
-			};
-			activities = [newActivity, ...activities];
-			triggerToast(`Activity "${newActivity.name}" published successfully!`);
-		} else if (editingId) {
-			activities = activities.map((a) =>
-				a.id === editingId
-					? {
-							...a,
-							name: formName.trim(),
-							track: formTrack,
-							type: formType,
-							credits: formCredits,
-							status: formStatus
-						}
-					: a
+		if (
+			!formTrack ||
+			(availableTracks.length === 0 && !availableTracks.some((t) => t.name === formTrack))
+		) {
+			triggerToast(
+				'Please select a valid track. If no tracks exist, create one in Track Management first.'
 			);
-			triggerToast(`Activity "${formName.trim()}" updated successfully!`);
+			return;
 		}
-		isActivityModalOpen = false;
+
+		if (formRegDeadline && formActivityDate && formRegDeadline > formActivityDate) {
+			triggerToast('Registration deadline must be on or before the activity date');
+			return;
+		}
+
+		const token = localStorage.getItem('superadmin_token') || '';
+		const payload = {
+			name: formName.trim(),
+			track: formTrack,
+			type: formType,
+			credits: formCredits,
+			status: formStatus,
+			category: formCategory,
+			description: formDescription.trim(),
+			mode: formMode,
+			reg_deadline: formRegDeadline,
+			activity_date: formActivityDate,
+			venue: formVenue.trim(),
+			coordinator: formCoordinator.trim()
+		};
+
+		try {
+			if (modalMode === 'add') {
+				const res = await fetch(`${API_BASE_URL}/api/admin/platform/activities`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${token}`
+					},
+					body: JSON.stringify(payload)
+				});
+				if (res.ok) {
+					const data = await res.json();
+					activities = [data.activity, ...activities];
+					triggerToast(`Activity "${payload.name}" published successfully!`);
+					isActivityModalOpen = false;
+				} else {
+					const errorData = await res.json().catch(() => ({}));
+					const errMsg = errorData.error || 'Failed to create activity';
+					triggerToast(errMsg);
+				}
+			} else if (editingId) {
+				const res = await fetch(`${API_BASE_URL}/api/admin/platform/activities/${editingId}`, {
+					method: 'PUT',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${token}`
+					},
+					body: JSON.stringify(payload)
+				});
+				if (res.ok) {
+					const data = await res.json();
+					activities = activities.map((a) => (a.id === editingId ? data.activity : a));
+					triggerToast(`Activity "${payload.name}" updated successfully!`);
+					isActivityModalOpen = false;
+				} else {
+					const errorData = await res.json().catch(() => ({}));
+					const errMsg = errorData.error || 'Failed to update activity';
+					triggerToast(errMsg);
+				}
+			}
+		} catch (err) {
+			console.error(err);
+			triggerToast('Network error while saving activity');
+		}
 	}
 
-	function handleDeleteActivity(activity: Activity) {
+	async function handleDeleteActivity(activity: Activity) {
 		if (confirm(`Are you sure you want to delete "${activity.name}"?`)) {
-			activities = activities.filter((a) => a.id !== activity.id);
-			triggerToast(`Activity "${activity.name}" deleted successfully.`);
+			const token = localStorage.getItem('superadmin_token') || '';
+			try {
+				const res = await fetch(`${API_BASE_URL}/api/admin/platform/activities/${activity.id}`, {
+					method: 'DELETE',
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				});
+				if (res.ok) {
+					activities = activities.filter((a) => a.id !== activity.id);
+					triggerToast(`Activity "${activity.name}" deleted successfully.`);
+				} else {
+					triggerToast('Failed to delete activity');
+				}
+			} catch (err) {
+				console.error(err);
+				triggerToast('Network error while deleting activity');
+			}
 		}
 	}
 
-	function toggleActivityStatus(activity: Activity) {
-		activities = activities.map((a) =>
-			a.id === activity.id ? { ...a, status: a.status === 'Active' ? 'Inactive' : 'Active' } : a
-		);
-		triggerToast(
-			`"${activity.name}" marked as ${activity.status === 'Active' ? 'Inactive' : 'Active'}.`
-		);
+	async function toggleActivityStatus(activity: Activity) {
+		const token = localStorage.getItem('superadmin_token') || '';
+		const newStatus = activity.status === 'Active' ? 'Inactive' : 'Active';
+		const payload = {
+			name: activity.name,
+			track: activity.track,
+			type: activity.type,
+			credits: activity.credits,
+			status: newStatus
+		};
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/activities/${activity.id}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify(payload)
+			});
+			if (res.ok) {
+				const data = await res.json();
+				activities = activities.map((a) => (a.id === activity.id ? data.activity : a));
+				triggerToast(`"${activity.name}" marked as ${newStatus}.`);
+			} else {
+				triggerToast('Failed to update status');
+			}
+		} catch (err) {
+			console.error(err);
+			triggerToast('Network error while toggling status');
+		}
 	}
 
 	// ── View Activity Modal ───────────────────────────────────────────────────────
@@ -338,7 +447,7 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Total Activities
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+3 this semester</span>
+				<span class="text-[11px] font-bold text-slate-400 mt-1 block">Total Campus Activities</span>
 			</div>
 		</div>
 
@@ -369,7 +478,7 @@
 				<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 					Active Activities
 				</h3>
-				<span class="text-[11px] font-bold text-slate-400 mt-1 block">+2 this month</span>
+				<span class="text-[11px] font-bold text-slate-400 mt-1 block">Currently Active & Open</span>
 			</div>
 		</div>
 
@@ -401,7 +510,7 @@
 					Personality Development
 				</h3>
 				<span class="text-[11px] font-bold text-slate-400 mt-1 block"
-					>{personalityDevCount} workshops</span
+					>{personalityDevCount} registered activities</span
 				>
 			</div>
 		</div>
@@ -434,7 +543,7 @@
 					Skill Building
 				</h3>
 				<span class="text-[11px] font-bold text-slate-400 mt-1 block"
-					>{skillBuildingCount} courses</span
+					>{skillBuildingCount} registered activities</span
 				>
 			</div>
 		</div>
@@ -480,7 +589,7 @@
 				class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white select-none"
 			>
 				<div class="flex flex-wrap gap-1.5">
-					{#each ['All', 'Personality Development', 'Skill Building', 'Active', 'Inactive'] as const as tab}
+					{#each filterTabs as tab}
 						<button
 							type="button"
 							onclick={() => setFilter(tab)}
@@ -560,9 +669,7 @@
 												activity.track
 											)}"
 										>
-											{activity.track === 'Personality Development'
-												? 'Personality Dev.'
-												: 'Skill Building'}
+											{activity.track || 'Unassigned'}
 										</span>
 									</td>
 									<td class="py-4 px-5 text-slate-500 font-semibold">{activity.type}</td>
@@ -823,7 +930,7 @@
 	>
 		<form
 			onsubmit={handleSaveActivity}
-			class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans"
+			class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans max-h-[90vh] overflow-y-auto"
 		>
 			<div class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30">
 				<div>
@@ -868,6 +975,19 @@
 					/>
 				</div>
 
+				<div class="flex flex-col gap-1.5">
+					<label for="act-desc" class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+						>DESCRIPTION</label
+					>
+					<textarea
+						id="act-desc"
+						bind:value={formDescription}
+						placeholder="Provide a detailed description of the activity..."
+						rows="3"
+						class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355 resize-none"
+					></textarea>
+				</div>
+
 				<div class="grid grid-cols-2 gap-4">
 					<div class="flex flex-col gap-1.5">
 						<label for="act-track" class="text-[10px] font-extrabold text-slate-650 tracking-wider"
@@ -876,11 +996,29 @@
 						<select
 							id="act-track"
 							bind:value={formTrack}
-							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
+							onchange={() => (userSelectedTrack = true)}
+							disabled={availableTracks.length === 0 && !formTrack}
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355 disabled:bg-slate-100 disabled:text-slate-400"
 						>
-							<option value="Personality Development">Personality Development</option>
-							<option value="Skill Building">Skill Building</option>
+							{#if availableTracks.length === 0 && !formTrack}
+								<option value="" disabled selected
+									>No tracks available. Please create a track first.</option
+								>
+							{:else}
+								{#each availableTracks as trackOption}
+									<option value={trackOption.name}>{trackOption.name}</option>
+								{/each}
+								{#if !availableTracks.some((t) => t.name === formTrack) && formTrack}
+									<option value={formTrack}>{formTrack}</option>
+								{/if}
+							{/if}
 						</select>
+						{#if availableTracks.length === 0 && !formTrack}
+							<p class="text-[11px] text-amber-600 font-medium mt-1">
+								No active tracks exist in the database. Please add a track in Track Management
+								first.
+							</p>
+						{/if}
 					</div>
 
 					<div class="flex flex-col gap-1.5">
@@ -898,6 +1036,103 @@
 							<option value="Webinar">Webinar</option>
 							<option value="Course">Course</option>
 						</select>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-2 gap-4">
+					<div class="flex flex-col gap-1.5">
+						<label
+							for="act-category"
+							class="text-[10px] font-extrabold text-slate-650 tracking-wider">CATEGORY *</label
+						>
+						<select
+							id="act-category"
+							bind:value={formCategory}
+							onchange={syncTrackToCategory}
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
+						>
+							<option value="TECHNICAL">Technical</option>
+							<option value="SPORTS">Sports</option>
+							<option value="CULTURAL">Cultural</option>
+							<option value="SOCIAL SERVICE">Social Service</option>
+							<option value="RESEARCH">Research</option>
+							<option value="PUBLIC SPEAKING">Public Speaking</option>
+							<option value="LEADERSHIP">Leadership</option>
+						</select>
+					</div>
+
+					<div class="flex flex-col gap-1.5">
+						<label for="act-mode" class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+							>MODE *</label
+						>
+						<select
+							id="act-mode"
+							bind:value={formMode}
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
+						>
+							<option value="Offline">Offline</option>
+							<option value="Online">Online</option>
+							<option value="Hybrid">Hybrid</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-2 gap-4">
+					<div class="flex flex-col gap-1.5">
+						<label
+							for="act-reg-deadline"
+							class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+							>REGISTRATION DEADLINE *</label
+						>
+						<input
+							id="act-reg-deadline"
+							type="date"
+							bind:value={formRegDeadline}
+							required
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+						/>
+					</div>
+
+					<div class="flex flex-col gap-1.5">
+						<label for="act-date" class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+							>ACTIVITY DATE *</label
+						>
+						<input
+							id="act-date"
+							type="date"
+							bind:value={formActivityDate}
+							required
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+						/>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-2 gap-4">
+					<div class="flex flex-col gap-1.5">
+						<label for="act-venue" class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+							>VENUE</label
+						>
+						<input
+							id="act-venue"
+							type="text"
+							bind:value={formVenue}
+							placeholder="e.g. IIPS Main Ground"
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+						/>
+					</div>
+
+					<div class="flex flex-col gap-1.5">
+						<label
+							for="act-coordinator"
+							class="text-[10px] font-extrabold text-slate-650 tracking-wider">COORDINATOR</label
+						>
+						<input
+							id="act-coordinator"
+							type="text"
+							bind:value={formCoordinator}
+							placeholder="e.g. NSS Cell"
+							class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+						/>
 					</div>
 				</div>
 
@@ -1015,9 +1250,49 @@
 					<span class="text-xs font-bold text-slate-900">{viewingActivity.type}</span>
 				</div>
 				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Category</span>
+					<span class="text-xs font-bold text-slate-900"
+						>{viewingActivity.category || 'TECHNICAL'}</span
+					>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Mode</span>
+					<span class="text-xs font-bold text-slate-900">{viewingActivity.mode || 'Offline'}</span>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Registration Deadline</span>
+					<span class="text-xs font-bold text-slate-900"
+						>{viewingActivity.reg_deadline || 'N/A'}</span
+					>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Activity Date</span>
+					<span class="text-xs font-bold text-slate-900"
+						>{viewingActivity.activity_date || 'N/A'}</span
+					>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Venue</span>
+					<span class="text-xs font-bold text-slate-900">{viewingActivity.venue || 'N/A'}</span>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+					<span class="text-xs font-semibold text-slate-500">Coordinator</span>
+					<span class="text-xs font-bold text-slate-900"
+						>{viewingActivity.coordinator || 'N/A'}</span
+					>
+				</div>
+				<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
 					<span class="text-xs font-semibold text-slate-500">Credits</span>
 					<span class="text-xs font-bold text-slate-900">{viewingActivity.credits} cr</span>
 				</div>
+				{#if viewingActivity.description}
+					<div class="py-2.5 border-b border-slate-100 flex flex-col gap-1">
+						<span class="text-xs font-semibold text-slate-500">Description</span>
+						<span class="text-xs text-slate-700 leading-relaxed font-sans"
+							>{viewingActivity.description}</span
+						>
+					</div>
+				{/if}
 				<div class="flex items-center justify-between py-2.5">
 					<span class="text-xs font-semibold text-slate-500">Status</span>
 					<span

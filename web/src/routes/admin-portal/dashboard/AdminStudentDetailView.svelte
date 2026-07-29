@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { fade, slide } from 'svelte/transition';
+	import { onMount } from 'svelte';
 	import { API_BASE_URL } from '$lib/config';
-	import { downloadAuthedFile } from '$lib/api';
+	import { fade, slide } from 'svelte/transition';
 
 	// ── Types (structural match with AdminStudentManagementView's Student) ──────
 	type Status = 'Active' | 'At Risk' | 'Pending Review' | 'Inactive';
@@ -33,6 +33,14 @@
 		status: ActivityStatus;
 	}
 
+	interface AdminNote {
+		id: number;
+		author?: string;
+		role?: string;
+		text: string;
+		created_at?: string;
+	}
+
 	interface Certificate {
 		id: number;
 		name: string;
@@ -61,24 +69,6 @@
 		onToast?: (message: string, type?: 'success' | 'danger') => void;
 	} = $props();
 
-	async function viewCertificate(cert: Certificate) {
-		const token = localStorage.getItem('admin_token');
-		if (!token) {
-			toast('Your session has expired. Please sign in again.', 'danger');
-			return;
-		}
-		try {
-			await downloadAuthedFile(
-				`${API_BASE_URL}/api/admin/certificates/${cert.id}/file`,
-				token,
-				`${cert.name}.pdf`
-			);
-			toast(`Downloaded “${cert.name}”.`);
-		} catch (err) {
-			toast(err instanceof Error ? err.message : 'Could not open the certificate.', 'danger');
-		}
-	}
-
 	function toast(message: string, type: 'success' | 'danger' = 'success') {
 		onToast?.(message, type);
 	}
@@ -96,6 +86,125 @@
 	let searchQuery = $state('');
 	let filterCategory = $state('All');
 	let filterStatus = $state<'All' | ActivityStatus>('All');
+	let selectedActivity = $state<Activity | null>(null);
+	let selectedCert = $state<Certificate | null>(null);
+
+	function scrollToHistory(tab: 'activity' | 'certificate') {
+		activeTab = tab;
+		setTimeout(() => {
+			const el = document.getElementById('history-section');
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth' });
+			}
+		}, 50);
+	}
+
+	function downloadStudentReport() {
+		try {
+			const rows: string[][] = [
+				['ISPARC STUDENT INDIVIDUAL REPORT'],
+				['Generated At', new Date().toLocaleString()],
+				[],
+				['STUDENT PROFILE'],
+				['Roll No / Reg No', student.regNo],
+				['Student Name', student.name],
+				['Department', student.department],
+				['Semester', String(student.semester)],
+				['Batch', student.batch || 'Unassigned'],
+				['Email', student.email],
+				['Status', student.status],
+				['Credits Earned', String(student.creditsEarned)],
+				['Credits Required', String(student.creditsTarget)],
+				['Completion %', `${creditPct}%`],
+				[],
+				['CERTIFICATES LOG'],
+				['ID', 'Certificate Name', 'Issuer / Category', 'Credits', 'Status', 'Date']
+			];
+
+			if (certificates.length === 0) {
+				rows.push(['No certificates logged']);
+			} else {
+				for (const c of certificates) {
+					rows.push([String(c.id), c.name, c.issuer, String(c.credits), c.status, c.date]);
+				}
+			}
+
+			rows.push([]);
+			rows.push(['ACTIVITIES PARTICIPATION LOG']);
+			rows.push(['ID', 'Activity Name', 'Category', 'Credits', 'Status', 'Date']);
+
+			if (activities.length === 0) {
+				rows.push(['No activities logged']);
+			} else {
+				for (const a of activities) {
+					rows.push([String(a.id), a.name, a.category, String(a.credits), a.status, a.date]);
+				}
+			}
+
+			const csvString = rows
+				.map((row) => row.map((cell) => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+				.join('\n');
+
+			const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `${student.regNo}_Student_Report.csv`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(url);
+
+			toast(`Downloaded report for ${student.name}`);
+		} catch {
+			toast('Failed to download student report', 'danger');
+		}
+	}
+
+	function downloadActivityReport() {
+		try {
+			const rows: string[][] = [
+				['ISPARC STUDENT ACTIVITY PARTICIPATION REPORT'],
+				['Generated At', new Date().toLocaleString()],
+				[],
+				['STUDENT DETAILS'],
+				['Roll No', student.regNo],
+				['Student Name', student.name],
+				['Department', student.department],
+				['Semester', String(student.semester)],
+				['Batch', student.batch || 'Unassigned'],
+				[],
+				['ACTIVITIES PARTICIPATION LOG'],
+				['ID', 'Activity Name', 'Category', 'Credits', 'Status', 'Date']
+			];
+
+			if (activities.length === 0) {
+				rows.push(['No activities logged']);
+			} else {
+				for (const a of activities) {
+					rows.push([String(a.id), a.name, a.category, String(a.credits), a.status, a.date]);
+				}
+			}
+
+			const csvString = rows
+				.map((row) => row.map((cell) => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+				.join('\n');
+
+			const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `${student.regNo}_Activity_Report.csv`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(url);
+
+			toast(`Activity report downloaded for ${student.name}`);
+		} catch {
+			toast('Failed to download activity report', 'danger');
+		}
+	}
 
 	const categories = $derived(['All', ...Array.from(new Set(activities.map((a) => a.category)))]);
 
@@ -120,17 +229,29 @@
 		text: string;
 	}
 
-	let notes = $state<Note[]>([
-		{
-			id: 1,
-			author: 'Dr. Rajesh Kumar',
-			role: 'CSE Dept · Semester 6',
-			badge: 'Academic Advisor',
-			text: `Student actively participates in technical activities and consistently submits certificates on time. Academic performance in extracurricular domain is commendable — particularly strong engagement with NPTEL certifications and research-oriented activities. Leadership activity participation can be improved; recommend encouraging enrolment in upcoming Student Council or Workshop facilitation programmes. Overall, this student demonstrates initiative and discipline appropriate for the Skill Building track.`
-		}
-	]);
+	let notes = $state<Note[]>([]);
 
-	let nextNoteId = 2;
+	onMount(async () => {
+		try {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/students/${student.regNo}/observations`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) {
+				const data = await res.json();
+				notes = data.observations.map((obs: AdminNote) => ({
+					id: obs.id,
+					author: obs.author || 'Admin',
+					role: obs.role || 'Admin Staff',
+					badge: 'Admin',
+					text: obs.text
+				}));
+			}
+		} catch (e) {
+			console.error('Failed to load observations', e);
+		}
+	});
+
 	let composerOpen = $state(false);
 	let composerText = $state('');
 	let editingId = $state<number | null>(null);
@@ -147,28 +268,69 @@
 		composerOpen = true;
 	}
 
-	function saveNote() {
+	async function saveNote() {
 		const text = composerText.trim();
 		if (text === '') return;
+
 		if (editingId !== null) {
-			notes = notes.map((n) => (n.id === editingId ? { ...n, text } : n));
-			toast('Observation updated.');
-		} else {
+			try {
+				const token = localStorage.getItem('admin_token');
+				const res = await fetch(
+					`${API_BASE_URL}/api/admin/students/${student.regNo}/observations/${editingId}`,
+					{
+						method: 'PUT',
+						headers: {
+							'Content-Type': 'application/json',
+							Authorization: `Bearer ${token}`
+						},
+						body: JSON.stringify({ text })
+					}
+				);
+				if (res.ok) {
+					notes = notes.map((n) => (n.id === editingId ? { ...n, text } : n));
+					toast('Observation updated.');
+				} else {
+					toast('Failed to update observation', 'danger');
+				}
+			} catch {
+				toast('Failed to update observation', 'danger');
+			}
+			composerOpen = false;
+			composerText = '';
+			return;
+		}
+
+		try {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/students/${student.regNo}/observations`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify({ text })
+			});
+
+			if (!res.ok) throw new Error('Failed to save observation');
+
+			const data = await res.json();
 			notes = [
 				...notes,
 				{
-					id: nextNoteId++,
-					author: 'Dr. Rajesh Kumar',
-					role: 'CSE Dept · Semester 6',
-					badge: 'Academic Advisor',
-					text
+					id: data.observation.id,
+					author: data.observation.author || 'Admin',
+					role: data.observation.role || 'Admin Staff',
+					badge: 'Admin',
+					text: data.observation.text
 				}
 			];
 			toast('Observation added.');
+
+			composerOpen = false;
+			composerText = '';
+		} catch {
+			toast('Failed to save observation', 'danger');
 		}
-		composerOpen = false;
-		composerText = '';
-		editingId = null;
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
@@ -227,7 +389,7 @@
 	<!-- ── Back link ─────────────────────────────────────────────────────────── -->
 	<button
 		onclick={onBack}
-		class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-inst-navy transition-colors uppercase tracking-wider"
+		class="hover:text-inst-navy inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-500 uppercase transition-colors"
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -235,7 +397,7 @@
 			viewBox="0 0 24 24"
 			stroke-width="2.5"
 			stroke="currentColor"
-			class="w-3.5 h-3.5"
+			class="h-3.5 w-3.5"
 		>
 			<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
 		</svg>
@@ -244,66 +406,66 @@
 
 	<!-- ── Page Heading ──────────────────────────────────────────────────────── -->
 	<div class="flex flex-col gap-1">
-		<h1 class="text-2xl font-bold font-serif text-slate-900">Student Details</h1>
-		<p class="text-xs text-slate-400 font-semibold tracking-wide">
+		<h1 class="font-serif text-2xl font-bold text-slate-900">Student Details</h1>
+		<p class="text-xs font-semibold tracking-wide text-slate-400">
 			View complete student extracurricular profile and performance.
 		</p>
 	</div>
 
 	<!-- ── Profile Header Card ───────────────────────────────────────────────── -->
-	<section class="bg-white border border-slate-200 rounded-xl shadow-xs p-5 sm:p-6">
-		<div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+	<section class="rounded-xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
+		<div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
 			<!-- Identity -->
-			<div class="flex items-start gap-4 min-w-0">
+			<div class="flex min-w-0 items-start gap-4">
 				<div
-					class="w-16 h-16 rounded-full bg-[#881B1B] text-white flex items-center justify-center font-bold text-xl border-2 border-white shadow-md font-serif shrink-0"
+					class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#881B1B] font-serif text-xl font-bold text-white shadow-md"
 				>
 					{initials(student.name)}
 				</div>
 				<div class="min-w-0">
-					<div class="flex items-center gap-2.5 flex-wrap">
-						<h2 class="text-lg font-bold font-serif text-slate-900">{student.name}</h2>
+					<div class="flex flex-wrap items-center gap-2.5">
+						<h2 class="font-serif text-lg font-bold text-slate-900">{student.name}</h2>
 						<span
-							class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide {studentStatusChip(
+							class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-extrabold tracking-wide uppercase {studentStatusChip(
 								student.status
 							)}"
 						>
-							<span class="w-1.5 h-1.5 rounded-full bg-current opacity-70"></span>
+							<span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
 							{student.status}
 						</span>
 					</div>
-					<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+					<p class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 						{student.regNo}
 					</p>
 
 					<!-- Meta grid -->
-					<div class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 mt-4">
+					<div class="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
 						<div>
-							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+							<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 								>Department</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5">{student.department}</span
+							<span class="mt-0.5 block text-xs font-bold text-slate-800">{student.department}</span
 							>
 						</div>
 						<div>
-							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+							<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 								>Email</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5">{student.email}</span>
+							<span class="mt-0.5 block text-xs font-bold text-slate-800">{student.email}</span>
 						</div>
 						<div>
-							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+							<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 								>Semester</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5"
+							<span class="mt-0.5 block text-xs font-bold text-slate-800"
 								>{semesterLabel(student.semester)}</span
 							>
 						</div>
 						<div>
-							<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+							<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 								>Batch</span
 							>
-							<span class="text-xs font-bold text-slate-800 block mt-0.5"
+							<span class="mt-0.5 block text-xs font-bold text-slate-800"
 								>{student.batch || '—'}</span
 							>
 						</div>
@@ -312,10 +474,10 @@
 			</div>
 
 			<!-- Actions -->
-			<div class="flex flex-wrap items-center gap-2 shrink-0">
+			<div class="flex shrink-0 flex-wrap items-center gap-2">
 				<button
-					onclick={() => (activeTab = 'activity')}
-					class="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+					onclick={() => scrollToHistory('activity')}
+					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -323,7 +485,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -334,8 +496,8 @@
 					View Activities
 				</button>
 				<button
-					onclick={() => (activeTab = 'certificate')}
-					class="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+					onclick={() => scrollToHistory('certificate')}
+					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -343,7 +505,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -354,8 +516,8 @@
 					View Certificates
 				</button>
 				<button
-					onclick={() => toast(`Generating report for ${student.name}...`)}
-					class="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-[#881B1B] hover:bg-[#881B1B]/90 rounded-lg transition-colors shadow-xs"
+					onclick={downloadStudentReport}
+					class="inline-flex items-center gap-1.5 rounded-lg bg-[#881B1B] px-3 py-2 text-[11px] font-bold text-white shadow-xs transition-colors hover:bg-[#881B1B]/90 cursor-pointer"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -363,7 +525,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -378,20 +540,20 @@
 	</section>
 
 	<!-- ── Stat Cards ────────────────────────────────────────────────────────── -->
-	<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+	<section class="grid grid-cols-2 gap-4 lg:grid-cols-4">
 		<!-- Total Credits Earned -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow"
+			class="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<div class="p-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
+				<div class="rounded-lg border border-rose-100 bg-rose-50 p-2 text-rose-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-4 h-4"
+						class="h-4 w-4"
 					>
 						<path
 							stroke-linecap="round"
@@ -402,9 +564,9 @@
 				</div>
 			</div>
 			<div class="mt-3">
-				<span class="text-2xl font-bold font-serif text-slate-900">{student.creditsEarned}</span>
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1">Total Credits Earned</h3>
-				<p class="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
+				<span class="font-serif text-2xl font-bold text-slate-900">{student.creditsEarned}</span>
+				<h3 class="mt-1 text-xs font-bold tracking-wide text-slate-800">Total Credits Earned</h3>
+				<p class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					{creditPct}% Complete
 				</p>
 			</div>
@@ -412,17 +574,17 @@
 
 		<!-- Activities Logged -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow"
+			class="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<div class="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+				<div class="rounded-lg border border-blue-100 bg-blue-50 p-2 text-blue-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-4 h-4"
+						class="h-4 w-4"
 					>
 						<path
 							stroke-linecap="round"
@@ -433,9 +595,9 @@
 				</div>
 			</div>
 			<div class="mt-3">
-				<span class="text-2xl font-bold font-serif text-slate-900">{student.activityCount}</span>
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1">Activities Logged</h3>
-				<p class="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
+				<span class="font-serif text-2xl font-bold text-slate-900">{student.activityCount}</span>
+				<h3 class="mt-1 text-xs font-bold tracking-wide text-slate-800">Activities Logged</h3>
+				<p class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					This academic year
 				</p>
 			</div>
@@ -443,17 +605,17 @@
 
 		<!-- Certificates Verified -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow"
+			class="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<div class="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+				<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-emerald-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-4 h-4"
+						class="h-4 w-4"
 					>
 						<path
 							stroke-linecap="round"
@@ -464,9 +626,9 @@
 				</div>
 			</div>
 			<div class="mt-3">
-				<span class="text-2xl font-bold font-serif text-slate-900">{student.certificates}</span>
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1">Certificates Verified</h3>
-				<p class="text-[10px] font-bold text-amber-500 mt-0.5 uppercase tracking-wider">
+				<span class="font-serif text-2xl font-bold text-slate-900">{student.certificates}</span>
+				<h3 class="mt-1 text-xs font-bold tracking-wide text-slate-800">Certificates Verified</h3>
+				<p class="mt-0.5 text-[10px] font-bold tracking-wider text-amber-500 uppercase">
 					{pendingCerts} pending review
 				</p>
 			</div>
@@ -474,17 +636,17 @@
 
 		<!-- Current Rank -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow"
+			class="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<div class="p-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
+				<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-amber-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-4 h-4"
+						class="h-4 w-4"
 					>
 						<path
 							stroke-linecap="round"
@@ -495,9 +657,9 @@
 				</div>
 			</div>
 			<div class="mt-3">
-				<span class="text-2xl font-bold font-serif text-slate-900">#{rank}</span>
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1">Current Rank</h3>
-				<p class="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
+				<span class="font-serif text-2xl font-bold text-slate-900">#{rank}</span>
+				<h3 class="mt-1 text-xs font-bold tracking-wide text-slate-800">Current Rank</h3>
+				<p class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					Among {cohortSize} students
 				</p>
 			</div>
@@ -505,46 +667,46 @@
 	</section>
 
 	<!-- ── Credit Progress ───────────────────────────────────────────────────── -->
-	<section class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-		<div class="p-5 border-b border-slate-100 bg-slate-50/20">
-			<h2 class="text-sm font-bold font-serif text-inst-navy">Credit Progress</h2>
+	<section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+		<div class="border-b border-slate-100 bg-slate-50/20 p-5">
+			<h2 class="text-inst-navy font-serif text-sm font-bold">Credit Progress</h2>
 		</div>
-		<div class="p-5 space-y-4">
+		<div class="space-y-4 p-5">
 			<div class="grid grid-cols-3 gap-4">
-				<div class="text-center rounded-xl bg-emerald-50/60 border border-emerald-100 py-4">
-					<div class="text-2xl font-bold font-serif text-emerald-600">{student.creditsEarned}</div>
-					<div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+				<div class="rounded-xl border border-emerald-100 bg-emerald-50/60 py-4 text-center">
+					<div class="font-serif text-2xl font-bold text-emerald-600">{student.creditsEarned}</div>
+					<div class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 						Credits Earned
 					</div>
 				</div>
-				<div class="text-center rounded-xl bg-slate-50 border border-slate-150 py-4">
-					<div class="text-2xl font-bold font-serif text-slate-800">{student.creditsTarget}</div>
-					<div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+				<div class="border-slate-150 rounded-xl border bg-slate-50 py-4 text-center">
+					<div class="font-serif text-2xl font-bold text-slate-800">{student.creditsTarget}</div>
+					<div class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 						Credits Required
 					</div>
 				</div>
-				<div class="text-center rounded-xl bg-amber-50/60 border border-amber-100 py-4">
-					<div class="text-2xl font-bold font-serif text-amber-600">{creditsRemaining}</div>
-					<div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+				<div class="rounded-xl border border-amber-100 bg-amber-50/60 py-4 text-center">
+					<div class="font-serif text-2xl font-bold text-amber-600">{creditsRemaining}</div>
+					<div class="mt-0.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 						Remaining
 					</div>
 				</div>
 			</div>
 
 			<div>
-				<div class="flex items-center justify-between mb-1.5">
-					<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+				<div class="mb-1.5 flex items-center justify-between">
+					<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
 						>{student.creditsEarned} / {student.creditsTarget} Credits</span
 					>
 					<span class="text-[10px] font-extrabold text-slate-600">{creditPct}% Complete</span>
 				</div>
-				<div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+				<div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
 					<div
 						class="h-full rounded-full bg-gradient-to-r from-[#881B1B] to-rose-500 transition-all duration-500"
 						style="width: {creditPct}%"
 					></div>
 				</div>
-				<p class="text-[10px] text-slate-400 font-semibold mt-2">
+				<p class="mt-2 text-[10px] font-semibold text-slate-400">
 					{student.name.split(' ')[0]} has completed {creditPct}% of the required {student.creditsTarget}
 					credits. Maintaining the current activity pace, on track to complete before the end of the semester.
 				</p>
@@ -553,21 +715,24 @@
 	</section>
 
 	<!-- ── History (tabs) ────────────────────────────────────────────────────── -->
-	<section class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+	<section
+		id="history-section"
+		class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
+	>
 		<!-- Tabs -->
-		<div class="px-5 pt-4 border-b border-slate-100 flex items-center gap-6">
+		<div class="flex items-center gap-6 border-b border-slate-100 px-5 pt-4">
 			<button
 				onclick={() => (activeTab = 'activity')}
-				class="pb-3 text-xs font-bold border-b-2 transition-colors {activeTab === 'activity'
-					? 'border-[#881B1B] text-inst-navy'
+				class="border-b-2 pb-3 text-xs font-bold transition-colors {activeTab === 'activity'
+					? 'text-inst-navy border-[#881B1B]'
 					: 'border-transparent text-slate-400 hover:text-slate-600'}"
 			>
 				Activity Participation History
 			</button>
 			<button
 				onclick={() => (activeTab = 'certificate')}
-				class="pb-3 text-xs font-bold border-b-2 transition-colors {activeTab === 'certificate'
-					? 'border-[#881B1B] text-inst-navy'
+				class="border-b-2 pb-3 text-xs font-bold transition-colors {activeTab === 'certificate'
+					? 'text-inst-navy border-[#881B1B]'
 					: 'border-transparent text-slate-400 hover:text-slate-600'}"
 			>
 				Certificate History
@@ -576,16 +741,16 @@
 
 		{#if activeTab === 'activity'}
 			<!-- Filter bar -->
-			<div class="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-3">
+			<div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3.5">
 				<div class="relative flex items-center">
-					<span class="absolute left-3 text-slate-400 pointer-events-none">
+					<span class="pointer-events-none absolute left-3 text-slate-400">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-3.5 h-3.5"
+							class="h-3.5 w-3.5"
 						>
 							<path
 								stroke-linecap="round"
@@ -598,13 +763,13 @@
 						type="text"
 						placeholder="Search activity..."
 						bind:value={searchQuery}
-						class="pl-8 pr-4 py-2 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-slate-350 focus:bg-white w-48 transition-all focus:w-56"
+						class="focus:border-slate-350 w-48 rounded-lg border border-slate-200 bg-slate-50 py-2 pr-4 pl-8 text-xs text-slate-800 transition-all focus:w-56 focus:bg-white focus:outline-none"
 					/>
 				</div>
 
 				<select
 					bind:value={filterCategory}
-					class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 focus:outline-none focus:border-slate-350"
+					class="focus:border-slate-350 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 focus:outline-none"
 				>
 					{#each categories as cat}
 						<option value={cat}>{cat === 'All' ? 'Category' : cat}</option>
@@ -613,7 +778,7 @@
 
 				<select
 					bind:value={filterStatus}
-					class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 focus:outline-none focus:border-slate-350"
+					class="focus:border-slate-350 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 focus:outline-none"
 				>
 					<option value="All">Status</option>
 					<option value="Completed">Completed</option>
@@ -624,52 +789,52 @@
 
 			<!-- Activity table -->
 			<div class="overflow-x-auto">
-				<table class="w-full text-left border-collapse">
+				<table class="w-full border-collapse text-left">
 					<thead>
 						<tr
-							class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"
+							class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
 						>
-							<th class="py-3 px-5">Activity Name</th>
-							<th class="py-3 px-5">Category</th>
-							<th class="py-3 px-5">Date</th>
-							<th class="py-3 px-5">Credits</th>
-							<th class="py-3 px-5">Status</th>
-							<th class="py-3 px-5 text-center">Actions</th>
+							<th class="px-5 py-3">Activity Name</th>
+							<th class="px-5 py-3">Category</th>
+							<th class="px-5 py-3">Date</th>
+							<th class="px-5 py-3">Credits</th>
+							<th class="px-5 py-3">Status</th>
+							<th class="px-5 py-3 text-center">Actions</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-slate-100 text-xs font-sans">
+					<tbody class="divide-y divide-slate-100 font-sans text-xs">
 						{#if filteredActivities.length === 0}
 							<tr>
-								<td colspan="6" class="py-14 text-center text-slate-400 font-semibold text-xs">
+								<td colspan="6" class="py-14 text-center text-xs font-semibold text-slate-400">
 									No activities match your filters.
 								</td>
 							</tr>
 						{:else}
 							{#each filteredActivities as activity (activity.id)}
-								<tr class="hover:bg-slate-50/50 transition-colors">
-									<td class="py-3.5 px-5 font-bold text-slate-800">{activity.name}</td>
-									<td class="py-3.5 px-5">
+								<tr class="transition-colors hover:bg-slate-50/50">
+									<td class="px-5 py-3.5 font-bold text-slate-800">{activity.name}</td>
+									<td class="px-5 py-3.5">
 										<span
-											class="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md"
+											class="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500"
 											>{activity.category}</span
 										>
 									</td>
-									<td class="py-3.5 px-5 text-slate-500 font-semibold">{activity.date}</td>
-									<td class="py-3.5 px-5 font-extrabold text-slate-800">{activity.credits}</td>
-									<td class="py-3.5 px-5">
+									<td class="px-5 py-3.5 font-semibold text-slate-500">{activity.date}</td>
+									<td class="px-5 py-3.5 font-extrabold text-slate-800">{activity.credits}</td>
+									<td class="px-5 py-3.5">
 										<span
-											class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wide {statusChip(
+											class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-extrabold tracking-wide uppercase {statusChip(
 												activity.status
 											)}"
 										>
-											<span class="w-1.5 h-1.5 rounded-full {statusDot(activity.status)}"></span>
+											<span class="h-1.5 w-1.5 rounded-full {statusDot(activity.status)}"></span>
 											{activity.status}
 										</span>
 									</td>
-									<td class="py-3.5 px-5 text-center">
+									<td class="px-5 py-3.5 text-center">
 										<button
-											onclick={() => toast(`Opening “${activity.name}”`)}
-											class="text-[11px] font-bold text-inst-navy hover:underline"
+											onclick={() => (selectedActivity = activity)}
+											class="text-inst-navy text-[11px] font-bold hover:underline cursor-pointer"
 										>
 											View Activity
 										</button>
@@ -683,40 +848,40 @@
 		{:else}
 			<!-- Certificate table -->
 			<div class="overflow-x-auto">
-				<table class="w-full text-left border-collapse">
+				<table class="w-full border-collapse text-left">
 					<thead>
 						<tr
-							class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"
+							class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
 						>
-							<th class="py-3 px-5">Certificate</th>
-							<th class="py-3 px-5">Issuer</th>
-							<th class="py-3 px-5">Date</th>
-							<th class="py-3 px-5">Credits</th>
-							<th class="py-3 px-5">Status</th>
-							<th class="py-3 px-5 text-center">Actions</th>
+							<th class="px-5 py-3">Certificate</th>
+							<th class="px-5 py-3">Issuer</th>
+							<th class="px-5 py-3">Date</th>
+							<th class="px-5 py-3">Credits</th>
+							<th class="px-5 py-3">Status</th>
+							<th class="px-5 py-3 text-center">Actions</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-slate-100 text-xs font-sans">
+					<tbody class="divide-y divide-slate-100 font-sans text-xs">
 						{#each certificates as cert (cert.id)}
-							<tr class="hover:bg-slate-50/50 transition-colors">
-								<td class="py-3.5 px-5 font-bold text-slate-800">{cert.name}</td>
-								<td class="py-3.5 px-5 text-slate-600 font-semibold">{cert.issuer}</td>
-								<td class="py-3.5 px-5 text-slate-500 font-semibold">{cert.date}</td>
-								<td class="py-3.5 px-5 font-extrabold text-slate-800">{cert.credits}</td>
-								<td class="py-3.5 px-5">
+							<tr class="transition-colors hover:bg-slate-50/50">
+								<td class="px-5 py-3.5 font-bold text-slate-800">{cert.name}</td>
+								<td class="px-5 py-3.5 font-semibold text-slate-600">{cert.issuer}</td>
+								<td class="px-5 py-3.5 font-semibold text-slate-500">{cert.date}</td>
+								<td class="px-5 py-3.5 font-extrabold text-slate-800">{cert.credits}</td>
+								<td class="px-5 py-3.5">
 									<span
-										class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wide {statusChip(
+										class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-extrabold tracking-wide uppercase {statusChip(
 											cert.status
 										)}"
 									>
-										<span class="w-1.5 h-1.5 rounded-full {statusDot(cert.status)}"></span>
+										<span class="h-1.5 w-1.5 rounded-full {statusDot(cert.status)}"></span>
 										{cert.status}
 									</span>
 								</td>
-								<td class="py-3.5 px-5 text-center">
+								<td class="px-5 py-3.5 text-center">
 									<button
-										onclick={() => viewCertificate(cert)}
-										class="text-[11px] font-bold text-inst-navy hover:underline"
+										onclick={() => (selectedCert = cert)}
+										class="text-inst-navy text-[11px] font-bold hover:underline cursor-pointer"
 									>
 										View
 									</button>
@@ -730,18 +895,18 @@
 	</section>
 
 	<!-- ── Performance Summary + Quick Insights ──────────────────────────────── -->
-	<section class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+	<section class="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
 		<!-- Performance Summary -->
 		<div
-			class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col"
+			class="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
 		>
-			<div class="p-5 border-b border-slate-100 bg-slate-50/20">
-				<h2 class="text-sm font-bold font-serif text-inst-navy">Performance Summary</h2>
+			<div class="border-b border-slate-100 bg-slate-50/20 p-5">
+				<h2 class="text-inst-navy font-serif text-sm font-bold">Performance Summary</h2>
 			</div>
-			<div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow">
-				<div class="flex items-center gap-3 bg-slate-50 rounded-xl border border-slate-150 p-4">
+			<div class="grid flex-grow grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+				<div class="border-slate-150 flex items-center gap-3 rounded-xl border bg-slate-50 p-4">
 					<div
-						class="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-blue-100 text-blue-600"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -749,7 +914,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-4 w-4"
 						>
 							<path
 								stroke-linecap="round"
@@ -759,16 +924,16 @@
 						</svg>
 					</div>
 					<div class="min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Most Active Category</span
 						>
-						<span class="text-sm font-bold text-slate-900 block">Technical</span>
+						<span class="block text-sm font-bold text-slate-900">Technical</span>
 					</div>
 				</div>
 
-				<div class="flex items-center gap-3 bg-slate-50 rounded-xl border border-slate-150 p-4">
+				<div class="border-slate-150 flex items-center gap-3 rounded-xl border bg-slate-50 p-4">
 					<div
-						class="w-9 h-9 rounded-lg bg-yellow-100 text-yellow-600 border border-yellow-200 flex items-center justify-center shrink-0"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-yellow-200 bg-yellow-100 text-yellow-600"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -776,7 +941,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-4 w-4"
 						>
 							<path
 								stroke-linecap="round"
@@ -786,17 +951,17 @@
 						</svg>
 					</div>
 					<div class="min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Highest Credit Activity</span
 						>
-						<span class="text-sm font-bold text-slate-900 block truncate">NPTEL Certification</span>
-						<span class="text-[10px] text-slate-500 font-semibold">20 Credits</span>
+						<span class="block truncate text-sm font-bold text-slate-900">NPTEL Certification</span>
+						<span class="text-[10px] font-semibold text-slate-500">20 Credits</span>
 					</div>
 				</div>
 
-				<div class="flex items-center gap-3 bg-slate-50 rounded-xl border border-slate-150 p-4">
+				<div class="border-slate-150 flex items-center gap-3 rounded-xl border bg-slate-50 p-4">
 					<div
-						class="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-100 text-emerald-600"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -804,7 +969,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-4 w-4"
 						>
 							<path
 								stroke-linecap="round"
@@ -814,16 +979,16 @@
 						</svg>
 					</div>
 					<div class="min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Participation Score</span
 						>
-						<span class="text-sm font-bold text-slate-900 block">{participationScore}%</span>
+						<span class="block text-sm font-bold text-slate-900">{participationScore}%</span>
 					</div>
 				</div>
 
-				<div class="flex items-center gap-3 bg-slate-50 rounded-xl border border-slate-150 p-4">
+				<div class="border-slate-150 flex items-center gap-3 rounded-xl border bg-slate-50 p-4">
 					<div
-						class="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 border border-purple-200 flex items-center justify-center shrink-0"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-purple-200 bg-purple-100 text-purple-600"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -831,7 +996,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-4 w-4"
 						>
 							<path
 								stroke-linecap="round"
@@ -841,10 +1006,10 @@
 						</svg>
 					</div>
 					<div class="min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Last Activity Date</span
 						>
-						<span class="text-sm font-bold text-slate-900 block">24 Jun 2025</span>
+						<span class="block text-sm font-bold text-slate-900">24 Jun 2025</span>
 					</div>
 				</div>
 			</div>
@@ -852,53 +1017,53 @@
 
 		<!-- Quick Insights -->
 		<div
-			class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col"
+			class="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
 		>
-			<div class="p-5 border-b border-slate-100 bg-slate-50/20">
-				<h2 class="text-sm font-bold font-serif text-inst-navy">Quick Insights</h2>
+			<div class="border-b border-slate-100 bg-slate-50/20 p-5">
+				<h2 class="text-inst-navy font-serif text-sm font-bold">Quick Insights</h2>
 			</div>
-			<div class="p-4 space-y-2.5 flex-grow flex flex-col">
+			<div class="flex flex-grow flex-col space-y-2.5 p-4">
 				<div
-					class="flex items-center gap-2.5 p-3 rounded-lg bg-amber-50/60 border border-amber-100"
+					class="flex items-center gap-2.5 rounded-lg border border-amber-100 bg-amber-50/60 p-3"
 				>
-					<span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+					<span class="h-2 w-2 shrink-0 rounded-full bg-amber-500"></span>
 					<p class="text-[11px] font-bold text-slate-700">
 						{pendingCerts} Certificates Pending Verification
 					</p>
 				</div>
 				<div
-					class="flex items-center gap-2.5 p-3 rounded-lg bg-emerald-50/60 border border-emerald-100"
+					class="flex items-center gap-2.5 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
 				>
-					<span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+					<span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
 					<p class="text-[11px] font-bold text-slate-700">Excellent Participation Rate</p>
 				</div>
-				<div class="flex items-center gap-2.5 p-3 rounded-lg bg-blue-50/60 border border-blue-100">
-					<span class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+				<div class="flex items-center gap-2.5 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+					<span class="h-2 w-2 shrink-0 rounded-full bg-blue-500"></span>
 					<p class="text-[11px] font-bold text-slate-700">Top 10% in Assigned Batch</p>
 				</div>
 				<div
-					class="flex items-center gap-2.5 p-3 rounded-lg bg-purple-50/60 border border-purple-100"
+					class="flex items-center gap-2.5 rounded-lg border border-purple-100 bg-purple-50/60 p-3"
 				>
-					<span class="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span>
+					<span class="h-2 w-2 shrink-0 rounded-full bg-purple-500"></span>
 					<p class="text-[11px] font-bold text-slate-700">Consistent Activity Submission</p>
 				</div>
 
-				<div class="pt-2 mt-auto">
-					<div class="flex items-center justify-between mb-1.5">
-						<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+				<div class="mt-auto pt-2">
+					<div class="mb-1.5 flex items-center justify-between">
+						<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
 							>Overall Progress</span
 						>
 						<span class="text-[10px] font-extrabold text-slate-600">{creditPct}%</span>
 					</div>
-					<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+					<div class="h-2 w-full overflow-hidden rounded-full bg-slate-100">
 						<div
 							class="h-full rounded-full bg-gradient-to-r from-[#881B1B] to-rose-500"
 							style="width: {creditPct}%"
 						></div>
 					</div>
 					<button
-						onclick={() => toast(`Preparing full activity report for ${student.name}...`)}
-						class="w-full mt-3 py-2 text-[11px] font-bold text-[#881B1B] border border-[#881B1B]/20 bg-[#881B1B]/5 hover:bg-[#881B1B]/10 rounded-lg transition-colors tracking-wide uppercase"
+						onclick={downloadActivityReport}
+						class="mt-3 w-full rounded-lg border border-[#881B1B]/20 bg-[#881B1B]/5 py-2 text-[11px] font-bold tracking-wide text-[#881B1B] uppercase transition-colors hover:bg-[#881B1B]/10 cursor-pointer"
 					>
 						View Full Activity Report →
 					</button>
@@ -908,18 +1073,18 @@
 	</section>
 
 	<!-- ── Mentor Observations ───────────────────────────────────────────────── -->
-	<section class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+	<section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
 		<div
-			class="p-5 border-b border-slate-100 bg-slate-50/20 flex items-center justify-between gap-3"
+			class="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/20 p-5"
 		>
-			<h2 class="text-sm font-bold font-serif text-inst-navy flex items-center gap-2">
+			<h2 class="text-inst-navy flex items-center gap-2 font-serif text-sm font-bold">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke-width="2"
 					stroke="currentColor"
-					class="w-4 h-4 text-[#881B1B]"
+					class="h-4 w-4 text-[#881B1B]"
 				>
 					<path
 						stroke-linecap="round"
@@ -929,11 +1094,11 @@
 				</svg>
 				Mentor Observations
 			</h2>
-			<div class="flex items-center gap-2 shrink-0">
+			<div class="flex shrink-0 items-center gap-2">
 				<button
 					onclick={() => openEditNote(notes[notes.length - 1])}
 					disabled={notes.length === 0}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -941,7 +1106,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -953,7 +1118,7 @@
 				</button>
 				<button
 					onclick={openAddNote}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-[#881B1B] hover:bg-[#881B1B]/90 rounded-lg transition-colors shadow-xs"
+					class="inline-flex items-center gap-1.5 rounded-lg bg-[#881B1B] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs transition-colors hover:bg-[#881B1B]/90"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -961,7 +1126,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 					</svg>
@@ -970,32 +1135,32 @@
 			</div>
 		</div>
 
-		<div class="p-5 space-y-4">
+		<div class="space-y-4 p-5">
 			{#if composerOpen}
 				<div
 					transition:slide={{ duration: 150 }}
-					class="rounded-xl border border-slate-200 p-4 bg-slate-50/40"
+					class="rounded-xl border border-slate-200 bg-slate-50/40 p-4"
 				>
 					<textarea
 						bind:value={composerText}
 						rows="3"
 						placeholder="Write an observation about this student..."
-						class="w-full text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3 focus:outline-none focus:border-slate-350 resize-none"
+						class="focus:border-slate-350 w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 focus:outline-none"
 					></textarea>
-					<div class="flex items-center justify-end gap-2 mt-3">
+					<div class="mt-3 flex items-center justify-end gap-2">
 						<button
 							onclick={() => {
 								composerOpen = false;
 								composerText = '';
 								editingId = null;
 							}}
-							class="px-3 py-1.5 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+							class="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-100"
 						>
 							Cancel
 						</button>
 						<button
 							onclick={saveNote}
-							class="px-3 py-1.5 text-[11px] font-bold text-white bg-[#881B1B] hover:bg-[#881B1B]/90 rounded-lg transition-colors shadow-xs"
+							class="rounded-lg bg-[#881B1B] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs transition-colors hover:bg-[#881B1B]/90"
 						>
 							{editingId !== null ? 'Update' : 'Save'} Observation
 						</button>
@@ -1004,33 +1169,169 @@
 			{/if}
 
 			{#each notes as note (note.id)}
-				<div class="rounded-xl border border-slate-150 p-4">
+				<div class="border-slate-150 rounded-xl border p-4">
 					<div class="flex items-start gap-3">
 						<div
-							class="w-9 h-9 rounded-full bg-[#881B1B] text-white flex items-center justify-center font-bold text-xs border-2 border-white shadow-sm font-serif shrink-0"
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#881B1B] font-serif text-xs font-bold text-white shadow-sm"
 						>
 							{initials(note.author)}
 						</div>
 						<div class="min-w-0 flex-grow">
-							<div class="flex items-center gap-2 flex-wrap">
+							<div class="flex flex-wrap items-center gap-2">
 								<span class="text-xs font-bold text-slate-900">{note.author}</span>
 								<span
-									class="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded uppercase tracking-wide"
+									class="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-emerald-700 uppercase"
 									>{note.badge}</span
 								>
 							</div>
-							<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+							<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
 								>{note.role}</span
 							>
-							<p class="text-xs text-slate-600 font-medium leading-relaxed mt-2">{note.text}</p>
+							<p class="mt-2 text-xs leading-relaxed font-medium text-slate-600">{note.text}</p>
 						</div>
 					</div>
 				</div>
 			{/each}
 
-			<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+			<p class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 				Showing {notes.length} of {notes.length} observations
 			</p>
 		</div>
 	</section>
 </div>
+
+<!-- ── Activity Details Modal ───────────────────────────────────────────── -->
+{#if selectedActivity}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+		transition:fade={{ duration: 150 }}
+	>
+		<div
+			class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+			transition:slide={{ duration: 150 }}
+		>
+			<div class="flex items-center justify-between border-b border-slate-100 pb-4">
+				<div>
+					<span class="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
+						>Activity Details</span
+					>
+					<h3 class="text-base font-bold text-slate-900">{selectedActivity.name}</h3>
+				</div>
+				<button
+					aria-label="Close"
+					onclick={() => (selectedActivity = null)}
+					class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-5 w-5"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
+					</svg>
+				</button>
+			</div>
+			<div class="mt-4 space-y-3 font-sans text-xs">
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Category</span>
+					<span class="font-extrabold text-slate-800">{selectedActivity.category}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Date</span>
+					<span class="font-bold text-slate-800">{selectedActivity.date}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Credits Awarded</span>
+					<span class="font-extrabold text-emerald-700">{selectedActivity.credits} Credits</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Status</span>
+					<span class="font-bold text-slate-800">{selectedActivity.status}</span>
+				</div>
+			</div>
+			<div class="mt-6 flex justify-end">
+				<button
+					onclick={() => (selectedActivity = null)}
+					class="rounded-lg bg-[#881B1B] px-4 py-2 text-xs font-bold text-white hover:bg-[#881B1B]/90 cursor-pointer"
+				>
+					Close
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ── Certificate Details Modal ────────────────────────────────────────── -->
+{#if selectedCert}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+		transition:fade={{ duration: 150 }}
+	>
+		<div
+			class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+			transition:slide={{ duration: 150 }}
+		>
+			<div class="flex items-center justify-between border-b border-slate-100 pb-4">
+				<div>
+					<span class="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
+						>Certificate Verification</span
+					>
+					<h3 class="text-base font-bold text-slate-900">{selectedCert.name}</h3>
+				</div>
+				<button
+					aria-label="Close"
+					onclick={() => (selectedCert = null)}
+					class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-5 w-5"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
+					</svg>
+				</button>
+			</div>
+			<div class="mt-4 space-y-3 font-sans text-xs">
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Issuer / Organization</span>
+					<span class="font-extrabold text-slate-800">{selectedCert.issuer}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Issue Date</span>
+					<span class="font-bold text-slate-800">{selectedCert.date}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Credits Granted</span>
+					<span class="font-extrabold text-emerald-700">{selectedCert.credits} Credits</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Verification Status</span>
+					<span class="font-bold text-slate-800">{selectedCert.status}</span>
+				</div>
+			</div>
+			<div class="mt-6 flex justify-end">
+				<button
+					onclick={() => (selectedCert = null)}
+					class="rounded-lg bg-[#881B1B] px-4 py-2 text-xs font-bold text-white hover:bg-[#881B1B]/90 cursor-pointer"
+				>
+					Close
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

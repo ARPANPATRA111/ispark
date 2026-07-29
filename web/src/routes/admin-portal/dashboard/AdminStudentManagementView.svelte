@@ -59,6 +59,7 @@
 		activity_count?: number;
 		pending_certificates?: number;
 		engagement_status?: string;
+		total_certificates?: number;
 		certificates?: BackendCertificate[];
 		enrollments?: BackendEnrollment[];
 	}
@@ -95,7 +96,7 @@
 			semester: s.semester ?? 0,
 			creditsEarned: s.credits_earned ?? 0,
 			creditsTarget: 200,
-			certificates: s.certificates?.length ?? 0,
+			certificates: s.total_certificates ?? 0,
 			pendingCertificates: s.pending_certificates ?? 0,
 			activityCount: s.activity_count ?? 0,
 			status: toStatus(s.engagement_status),
@@ -259,6 +260,33 @@
 		activeStudent = null;
 	}
 
+	async function handleSendNotice() {
+		if (!activeStudent) return;
+		const message = prompt(`Enter notice message for ${activeStudent.name}:`);
+		if (!message || message.trim() === '') return;
+
+		triggerToast(`Sending notice to ${activeStudent.name}...`);
+		const token = localStorage.getItem('admin_token');
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/students/${activeStudent.regNo}/notice`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify({ message })
+			});
+			if (res.ok) {
+				triggerToast(`Notice sent successfully!`);
+			} else {
+				triggerToast(`Failed to send notice`, 'danger');
+			}
+		} catch {
+			triggerToast(`Failed to send notice`, 'danger');
+		}
+		closeModal();
+	}
+
 	// ── Student Detail View ──────────────────────────────────────────────────────
 	let detailStudent = $state<Student | null>(null);
 
@@ -331,14 +359,14 @@
 </script>
 
 <!-- ── Toast Container ─────────────────────────────────────────────────────── -->
-<div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none">
+<div class="pointer-events-none fixed right-4 bottom-4 z-50 flex max-w-sm flex-col gap-2">
 	{#each toasts as toast (toast.id)}
 		<div
 			transition:slide={{ duration: 150 }}
-			class="p-4 rounded-xl border shadow-lg flex items-center gap-3 text-xs font-semibold font-sans pointer-events-auto {toast.type ===
+			class="pointer-events-auto flex items-center gap-3 rounded-xl border p-4 font-sans text-xs font-semibold shadow-lg {toast.type ===
 			'success'
-				? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-				: 'bg-rose-50 border-rose-200 text-rose-800'}"
+				? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+				: 'border-rose-200 bg-rose-50 text-rose-800'}"
 		>
 			{#if toast.type === 'success'}
 				<svg
@@ -347,7 +375,7 @@
 					viewBox="0 0 24 24"
 					stroke-width="2.5"
 					stroke="currentColor"
-					class="w-4 h-4 text-emerald-600 shrink-0"
+					class="h-4 w-4 shrink-0 text-emerald-600"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
 				</svg>
@@ -358,7 +386,7 @@
 					viewBox="0 0 24 24"
 					stroke-width="2.5"
 					stroke="currentColor"
-					class="w-4 h-4 text-rose-600 shrink-0"
+					class="h-4 w-4 shrink-0 text-rose-600"
 				>
 					<path
 						stroke-linecap="round"
@@ -384,33 +412,33 @@
 	/>
 {:else}
 	<!-- ── Stat Cards ──────────────────────────────────────────────────────────── -->
-	<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+	<section class="grid grid-cols-2 gap-4 lg:grid-cols-4">
 		<!-- Total Students -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
+			class="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow duration-200 hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-2xl font-bold font-serif text-slate-900">{totalStudents}</span>
-				<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+				<span class="font-serif text-2xl font-bold text-slate-900">{totalStudents}</span>
+				<div class="rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-blue-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-5 h-5"
+						class="h-5 w-5"
 					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0 1 10.089 21c-2.316 0-4.445-.69-6.22-1.879v-.003a4.125 4.125 0 0 1 7.533-2.493M15 19.128v-.003c0-1.112-.285-2.16-.786-3.07M14.214 16.058A9.396 9.396 0 0 0 10.089 15c-1.47 0-2.854.34-4.082.945M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+							d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"
 						/>
 					</svg>
 				</div>
 			</div>
 			<div class="mt-4">
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide">Total Students</h3>
-				<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+				<h3 class="text-xs font-bold tracking-wide text-slate-800">Total Students</h3>
+				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					+2 this semester
 				</p>
 			</div>
@@ -418,18 +446,18 @@
 
 		<!-- Active Students -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
+			class="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow duration-200 hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-2xl font-bold font-serif text-slate-900">{activeStudents}</span>
-				<div class="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+				<span class="font-serif text-2xl font-bold text-slate-900">{activeStudents}</span>
+				<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2.5 text-emerald-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-5 h-5"
+						class="h-5 w-5"
 					>
 						<path
 							stroke-linecap="round"
@@ -440,8 +468,8 @@
 				</div>
 			</div>
 			<div class="mt-4">
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide">Active Students</h3>
-				<p class="text-[10px] font-bold text-emerald-500 mt-1 uppercase tracking-wider">
+				<h3 class="text-xs font-bold tracking-wide text-slate-800">Active Students</h3>
+				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					{activeStudents} on engagement
 				</p>
 			</div>
@@ -449,18 +477,18 @@
 
 		<!-- Pending Certificate Reviews -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
+			class="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow duration-200 hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-2xl font-bold font-serif text-slate-900">{pendingCertReviews}</span>
-				<div class="p-2.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
+				<span class="font-serif text-2xl font-bold text-slate-900">{pendingCertReviews}</span>
+				<div class="rounded-lg border border-amber-100 bg-amber-50 p-2.5 text-amber-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-5 h-5"
+						class="h-5 w-5"
 					>
 						<path
 							stroke-linecap="round"
@@ -471,8 +499,8 @@
 				</div>
 			</div>
 			<div class="mt-4">
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide">Pending Certificate Reviews</h3>
-				<p class="text-[10px] font-bold text-amber-500 mt-1 uppercase tracking-wider">
+				<h3 class="text-xs font-bold tracking-wide text-slate-800">Pending Certificate Reviews</h3>
+				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					3 marked urgent
 				</p>
 			</div>
@@ -480,18 +508,18 @@
 
 		<!-- Average Credits Earned -->
 		<div
-			class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
+			class="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-shadow duration-200 hover:shadow-md"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-2xl font-bold font-serif text-slate-900">{avgCredits}</span>
-				<div class="p-2.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100">
+				<span class="font-serif text-2xl font-bold text-slate-900">{avgCredits}</span>
+				<div class="rounded-lg border border-purple-100 bg-purple-50 p-2.5 text-purple-600">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-5 h-5"
+						class="h-5 w-5"
 					>
 						<path
 							stroke-linecap="round"
@@ -502,8 +530,8 @@
 				</div>
 			</div>
 			<div class="mt-4">
-				<h3 class="text-xs font-bold text-slate-800 tracking-wide">Average Credits Earned</h3>
-				<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+				<h3 class="text-xs font-bold tracking-wide text-slate-800">Average Credits Earned</h3>
+				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 					57.5% avg from last batch
 				</p>
 			</div>
@@ -511,24 +539,21 @@
 	</section>
 
 	<!-- ── Student Overview + Quick Insights ──────────────────────────────────── -->
-	<section class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+	<section class="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">
 		<!-- Student Overview -->
 		<div
-			class="lg:col-span-8 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col"
+			class="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs lg:col-span-8"
 		>
-			<div class="p-5 border-b border-slate-100 bg-slate-50/20">
-				<h2 class="text-sm font-bold font-serif text-inst-navy">Student Overview</h2>
-				<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-					Key performance profiles of enrolled students
-				</p>
+			<div class="border-b border-slate-100 bg-slate-50/20 p-5">
+				<h2 class="text-inst-navy font-serif text-sm font-bold">Student Overview</h2>
 			</div>
-			<div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow auto-rows-fr">
+			<div class="grid flex-grow auto-rows-fr grid-cols-1 gap-4 p-5 sm:grid-cols-2">
 				<!-- Top Performer -->
 				<div
-					class="bg-slate-50 rounded-xl border border-slate-150 p-4 flex items-center gap-3 hover:shadow-sm transition-shadow"
+					class="flex items-center gap-4 rounded-xl border border-slate-300/70 bg-white p-5 shadow-2xs transition-shadow hover:shadow-sm"
 				>
 					<div
-						class="w-9 h-9 rounded-lg bg-yellow-100 text-yellow-600 flex items-center justify-center border border-yellow-200 shrink-0"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-yellow-200 bg-amber-50 text-amber-500"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -536,7 +561,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-5 w-5"
 						>
 							<path
 								stroke-linecap="round"
@@ -545,14 +570,14 @@
 							/>
 						</svg>
 					</div>
-					<div class="flex flex-col gap-0.5 min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
-							>Top Performer</span
+					<div class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+							>TOP PERFORMER</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">
+						<span class="truncate text-base font-bold text-slate-900">
 							{topPerformer?.name || 'Waiting for data...'}
 						</span>
-						<span class="text-[10px] text-slate-500 font-semibold">
+						<span class="text-xs font-semibold text-slate-500">
 							{topPerformer?.creditsEarned || 0} credits · {topPerformer?.department || '...'}
 						</span>
 					</div>
@@ -560,10 +585,10 @@
 
 				<!-- Highest Credits Earned -->
 				<div
-					class="bg-slate-50 rounded-xl border border-slate-150 p-4 flex items-center gap-3 hover:shadow-sm transition-shadow"
+					class="flex items-center gap-4 rounded-xl border border-slate-300/70 bg-white p-5 shadow-2xs transition-shadow hover:shadow-sm"
 				>
 					<div
-						class="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center border border-emerald-200 shrink-0"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-500"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -571,7 +596,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-5 w-5"
 						>
 							<path
 								stroke-linecap="round"
@@ -580,14 +605,14 @@
 							/>
 						</svg>
 					</div>
-					<div class="flex flex-col gap-0.5 min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
-							>Highest Credits Earned</span
+					<div class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+							>HIGHEST CREDITS EARNED</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">
+						<span class="truncate text-base font-bold text-slate-900">
 							{highestCredits?.name || 'Waiting for data...'}
 						</span>
-						<span class="text-[10px] text-slate-500 font-semibold">
+						<span class="text-xs font-semibold text-slate-500">
 							{highestCredits?.creditsEarned || 0} credits earned this batch
 						</span>
 					</div>
@@ -595,10 +620,10 @@
 
 				<!-- Most Active Student -->
 				<div
-					class="bg-slate-50 rounded-xl border border-slate-150 p-4 flex items-center gap-3 hover:shadow-sm transition-shadow"
+					class="flex items-center gap-4 rounded-xl border border-slate-300/70 bg-white p-5 shadow-2xs transition-shadow hover:shadow-sm"
 				>
 					<div
-						class="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center border border-blue-200 shrink-0"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-500"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -606,7 +631,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-5 w-5"
 						>
 							<path
 								stroke-linecap="round"
@@ -615,14 +640,14 @@
 							/>
 						</svg>
 					</div>
-					<div class="flex flex-col gap-0.5 min-w-0">
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider"
-							>Most Active Student</span
+					<div class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+							>MOST ACTIVE STUDENT</span
 						>
-						<span class="font-bold text-sm text-slate-900 truncate">
+						<span class="truncate text-base font-bold text-slate-900">
 							{mostActive?.name || 'Waiting for data...'}
 						</span>
-						<span class="text-[10px] text-slate-500 font-semibold">
+						<span class="text-xs font-semibold text-slate-500">
 							{mostActive?.activityCount || 0} activities logged
 						</span>
 					</div>
@@ -630,10 +655,10 @@
 
 				<!-- Requiring Attention -->
 				<div
-					class="bg-rose-50/60 rounded-xl border border-rose-100 p-4 flex items-center gap-3 hover:shadow-sm transition-shadow"
+					class="flex items-center gap-4 rounded-xl border border-rose-200/80 bg-rose-50/50 p-5 shadow-2xs transition-shadow hover:shadow-sm"
 				>
 					<div
-						class="w-9 h-9 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center border border-rose-200 shrink-0"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-rose-100 text-rose-600"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -641,7 +666,7 @@
 							viewBox="0 0 24 24"
 							stroke-width="2"
 							stroke="currentColor"
-							class="w-4 h-4"
+							class="h-5 w-5"
 						>
 							<path
 								stroke-linecap="round"
@@ -650,16 +675,19 @@
 							/>
 						</svg>
 					</div>
-					<div class="flex flex-col gap-0.5 min-w-0">
-						<span class="text-[9px] font-bold text-rose-400 uppercase tracking-wider"
-							>Requiring Attention</span
+					<div class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-[10px] font-bold tracking-wider text-rose-500 uppercase"
+							>REQUIRING ATTENTION</span
 						>
-						<span class="font-bold text-sm text-rose-700">{pendingAttention.length} students</span>
-						<span class="text-[10px] text-rose-500 font-semibold">
-							{pendingAttention
-								.slice(0, 4)
-								.map((s) => s.name.split(' ')[0])
-								.join(', ')}
+						<span class="text-base font-bold text-rose-700">{pendingAttention.length} students</span
+						>
+						<span class="text-xs font-semibold text-rose-500">
+							{pendingAttention.length > 0
+								? pendingAttention
+										.slice(0, 4)
+										.map((s) => s.name.split(' ')[0])
+										.join(', ')
+								: 'None'}
 						</span>
 					</div>
 				</div>
@@ -668,22 +696,19 @@
 
 		<!-- Quick Insights -->
 		<div
-			class="lg:col-span-4 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden"
+			class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs lg:col-span-4"
 		>
-			<div class="p-5 border-b border-slate-100 bg-slate-50/20">
-				<h2 class="text-sm font-bold font-serif text-inst-navy">Quick Insights</h2>
-				<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-					Administrative actions
-				</p>
+			<div class="border-b border-slate-100 bg-slate-50/20 p-5">
+				<h2 class="text-inst-navy font-serif text-sm font-bold">Quick Insights</h2>
 			</div>
-			<div class="p-4 space-y-3">
+			<div class="space-y-3 p-4">
 				<!-- Pending certificates -->
 				<div
-					class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-slate-100 transition-colors cursor-pointer"
+					class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50"
 				>
 					<div class="flex items-center gap-2.5">
 						<div
-							class="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center"
+							class="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-100 bg-amber-50 text-amber-600"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -691,7 +716,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="2"
 								stroke="currentColor"
-								class="w-3.5 h-3.5"
+								class="h-3.5 w-3.5"
 							>
 								<path
 									stroke-linecap="round"
@@ -702,22 +727,22 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Pending certificates</p>
-							<p class="text-[9px] text-slate-400 font-semibold">Need review</p>
+							<p class="text-[9px] font-semibold text-slate-400">Need review</p>
 						</div>
 					</div>
 					<span
-						class="text-xs font-extrabold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md"
+						class="rounded-md border border-amber-100 bg-amber-50 px-2 py-0.5 text-xs font-extrabold text-amber-600"
 						>{pendingCertReviews}</span
 					>
 				</div>
 
 				<!-- Review credit target -->
 				<div
-					class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-slate-100 transition-colors cursor-pointer"
+					class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50"
 				>
 					<div class="flex items-center gap-2.5">
 						<div
-							class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center"
+							class="flex h-7 w-7 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -725,7 +750,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="2"
 								stroke="currentColor"
-								class="w-3.5 h-3.5"
+								class="h-3.5 w-3.5"
 							>
 								<path
 									stroke-linecap="round"
@@ -736,22 +761,22 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Review credit target</p>
-							<p class="text-[9px] text-slate-400 font-semibold">Below threshold</p>
+							<p class="text-[9px] font-semibold text-slate-400">Below threshold</p>
 						</div>
 					</div>
 					<span
-						class="text-xs font-extrabold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md"
+						class="rounded-md border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-extrabold text-blue-600"
 						>4</span
 					>
 				</div>
 
 				<!-- Inactive students -->
 				<div
-					class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-slate-100 transition-colors cursor-pointer"
+					class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50"
 				>
 					<div class="flex items-center gap-2.5">
 						<div
-							class="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center"
+							class="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-500"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -759,7 +784,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="2"
 								stroke="currentColor"
-								class="w-3.5 h-3.5"
+								class="h-3.5 w-3.5"
 							>
 								<path
 									stroke-linecap="round"
@@ -770,22 +795,22 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Inactive students</p>
-							<p class="text-[9px] text-slate-400 font-semibold">30 days</p>
+							<p class="text-[9px] font-semibold text-slate-400">30 days</p>
 						</div>
 					</div>
 					<span
-						class="text-xs font-extrabold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md"
+						class="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600"
 						>3</span
 					>
 				</div>
 
 				<!-- Pending review -->
 				<div
-					class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-slate-100 transition-colors cursor-pointer"
+					class="flex cursor-pointer items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50"
 				>
 					<div class="flex items-center gap-2.5">
 						<div
-							class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center"
+							class="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -793,7 +818,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="2"
 								stroke="currentColor"
-								class="w-3.5 h-3.5"
+								class="h-3.5 w-3.5"
 							>
 								<path
 									stroke-linecap="round"
@@ -804,11 +829,11 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Pending review</p>
-							<p class="text-[9px] text-slate-400 font-semibold">Action required</p>
+							<p class="text-[9px] font-semibold text-slate-400">Action required</p>
 						</div>
 					</div>
 					<span
-						class="text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md"
+						class="rounded-md border border-rose-100 bg-rose-50 px-2 py-0.5 text-xs font-extrabold text-rose-600"
 						>{pendingAttention.length}</span
 					>
 				</div>
@@ -819,7 +844,7 @@
 							filterStatus = 'At Risk';
 							resetPage();
 						}}
-						class="w-full py-2 text-[11px] font-bold text-[#881B1B] border border-[#881B1B]/20 bg-[#881B1B]/5 hover:bg-[#881B1B]/10 rounded-lg transition-colors tracking-wide uppercase"
+						class="w-full rounded-lg border border-[#881B1B]/20 bg-[#881B1B]/5 py-2 text-[11px] font-bold tracking-wide text-[#881B1B] uppercase transition-colors hover:bg-[#881B1B]/10"
 					>
 						View All Flagged Students
 					</button>
@@ -829,31 +854,31 @@
 	</section>
 
 	<!-- ── Student Management Table ───────────────────────────────────────────── -->
-	<section class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+	<section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
 		<!-- Table Header -->
 		<div
-			class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/20"
+			class="flex flex-col justify-between gap-3 border-b border-slate-100 bg-slate-50/20 p-5 sm:flex-row sm:items-center"
 		>
-			<h2 class="text-sm font-bold font-serif text-inst-navy">Student Management</h2>
+			<h2 class="text-inst-navy font-serif text-sm font-bold">Student Management</h2>
 			<div
-				class="flex items-center gap-2 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"
+				class="flex items-center gap-2 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
 			>
-				Total Students: <span class="text-slate-700 ml-1">{filteredStudents.length}</span>
+				Total Students: <span class="ml-1 text-slate-700">{filteredStudents.length}</span>
 			</div>
 		</div>
 
 		<!-- Search & Filter Bar -->
-		<div class="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-3">
+		<div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3.5">
 			<!-- Search -->
 			<div class="relative flex items-center">
-				<span class="absolute left-3 text-slate-400 pointer-events-none">
+				<span class="pointer-events-none absolute left-3 text-slate-400">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -867,14 +892,14 @@
 					placeholder="Search students..."
 					bind:value={searchQuery}
 					oninput={resetPage}
-					class="pl-8 pr-4 py-2 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-slate-350 focus:bg-white w-48 transition-all focus:w-56"
+					class="focus:border-slate-350 w-48 rounded-lg border border-slate-200 bg-slate-50 py-2 pr-4 pl-8 text-xs text-slate-800 transition-all focus:w-56 focus:bg-white focus:outline-none"
 				/>
 			</div>
 
 			<!-- More Filters toggle -->
 			<button
 				onclick={() => (showFilters = !showFilters)}
-				class="flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+				class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-500 transition-colors hover:bg-slate-50"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -882,7 +907,7 @@
 					viewBox="0 0 24 24"
 					stroke-width="2"
 					stroke="currentColor"
-					class="w-3.5 h-3.5"
+					class="h-3.5 w-3.5"
 				>
 					<path
 						stroke-linecap="round"
@@ -898,7 +923,7 @@
 					<select
 						bind:value={filterStatus}
 						onchange={resetPage}
-						class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 focus:outline-none focus:border-slate-350"
+						class="focus:border-slate-350 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 focus:outline-none"
 					>
 						<option value="All">All Status</option>
 						<option value="Active">Active</option>
@@ -910,7 +935,7 @@
 					<select
 						bind:value={filterDept}
 						onchange={resetPage}
-						class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 focus:outline-none focus:border-slate-350"
+						class="focus:border-slate-350 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 focus:outline-none"
 					>
 						{#each departments as dept}
 							<option value={dept}>{dept === 'All' ? 'All Departments' : dept}</option>
@@ -925,7 +950,7 @@
 								searchQuery = '';
 								resetPage();
 							}}
-							class="px-3 py-2 text-[11px] font-bold text-rose-600 border border-rose-200 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors"
+							class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-600 transition-colors hover:bg-rose-100"
 						>
 							Clear
 						</button>
@@ -936,50 +961,50 @@
 
 		<!-- Table -->
 		<div class="overflow-x-auto">
-			<table class="w-full text-left border-collapse">
+			<table class="w-full border-collapse text-left">
 				<thead>
 					<tr
-						class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"
+						class="border-b border-slate-100 bg-slate-50/50 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
 					>
-						<th class="py-3 px-5">Name</th>
-						<th class="py-3 px-5">Department</th>
-						<th class="py-3 px-5">Sem</th>
-						<th class="py-3 px-5">Credits Earned</th>
-						<th class="py-3 px-5">Certificates</th>
-						<th class="py-3 px-5">Activity Count</th>
-						<th class="py-3 px-5">Status</th>
-						<th class="py-3 px-5 text-center">Actions</th>
+						<th class="px-5 py-3">Name</th>
+						<th class="px-5 py-3">Department</th>
+						<th class="px-5 py-3">Sem</th>
+						<th class="px-5 py-3">Credits Earned</th>
+						<th class="px-5 py-3">Certificates</th>
+						<th class="px-5 py-3">Activity Count</th>
+						<th class="px-5 py-3">Status</th>
+						<th class="px-5 py-3 text-center">Actions</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-slate-100 text-xs font-sans">
+				<tbody class="divide-y divide-slate-100 font-sans text-xs">
 					{#if pagedStudents.length === 0}
 						<tr>
-							<td colspan="8" class="py-16 text-center text-slate-400 font-semibold text-xs">
+							<td colspan="8" class="py-16 text-center text-xs font-semibold text-slate-400">
 								No students match your search criteria.
 							</td>
 						</tr>
 					{:else}
 						{#each pagedStudents as student (student.id)}
-							<tr class="hover:bg-slate-50/50 transition-colors">
+							<tr class="transition-colors hover:bg-slate-50/50">
 								<!-- Name -->
-								<td class="py-3.5 px-5">
+								<td class="px-5 py-3.5">
 									<div class="font-bold text-slate-800">{student.name}</div>
-									<div class="text-[10px] text-slate-400 font-semibold uppercase">
+									<div class="text-[10px] font-semibold text-slate-400 uppercase">
 										{student.regNo}
 									</div>
 								</td>
 								<!-- Department -->
-								<td class="py-3.5 px-5 text-slate-600 font-semibold">{student.department}</td>
+								<td class="px-5 py-3.5 font-semibold text-slate-600">{student.department}</td>
 								<!-- Semester -->
-								<td class="py-3.5 px-5 text-slate-600 font-extrabold">{student.semester}th</td>
+								<td class="px-5 py-3.5 font-extrabold text-slate-600">{student.semester}th</td>
 								<!-- Credits Earned -->
-								<td class="py-3.5 px-5">
+								<td class="px-5 py-3.5">
 									<div class="flex items-baseline gap-1">
 										<span class="font-extrabold text-slate-800">{student.creditsEarned}</span>
-										<span class="text-[9px] text-slate-400 font-bold">/{student.creditsTarget}</span
+										<span class="text-[9px] font-bold text-slate-400">/{student.creditsTarget}</span
 										>
 									</div>
-									<div class="mt-1.5 h-1 w-20 bg-slate-100 rounded-full overflow-hidden">
+									<div class="mt-1.5 h-1 w-20 overflow-hidden rounded-full bg-slate-100">
 										<div
 											class="h-full rounded-full {student.creditsEarned >= 150
 												? 'bg-emerald-400'
@@ -994,29 +1019,29 @@
 									</div>
 								</td>
 								<!-- Certificates -->
-								<td class="py-3.5 px-5">
+								<td class="px-5 py-3.5">
 									<span class="font-extrabold text-[#881B1B]">{student.certificates}</span>
 								</td>
 								<!-- Activity Count -->
-								<td class="py-3.5 px-5 font-extrabold text-slate-700">{student.activityCount}</td>
+								<td class="px-5 py-3.5 font-extrabold text-slate-700">{student.activityCount}</td>
 								<!-- Status -->
-								<td class="py-3.5 px-5">
+								<td class="px-5 py-3.5">
 									<span
-										class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wide {statusClass(
+										class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-extrabold tracking-wide uppercase {statusClass(
 											student.status
 										)}"
 									>
-										<span class="w-1.5 h-1.5 rounded-full {statusDot(student.status)}"></span>
+										<span class="h-1.5 w-1.5 rounded-full {statusDot(student.status)}"></span>
 										{student.status}
 									</span>
 								</td>
 								<!-- Actions -->
-								<td class="py-3.5 px-5">
+								<td class="px-5 py-3.5">
 									<div class="flex items-center justify-center">
 										<button
 											onclick={() => openStudentModal(student)}
 											aria-label="View student"
-											class="p-1.5 border border-slate-200 text-slate-500 hover:text-inst-navy hover:bg-slate-100 rounded-lg transition-colors focus:outline-none"
+											class="flex h-8 w-8 items-center justify-center rounded-2xl bg-[#881B1B]/10 text-[#881B1B] transition-colors hover:bg-[#881B1B]/20 focus:outline-none"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -1024,7 +1049,7 @@
 												viewBox="0 0 24 24"
 												stroke-width="2"
 												stroke="currentColor"
-												class="w-4 h-4"
+												class="h-4 w-4"
 											>
 												<path
 													stroke-linecap="round"
@@ -1049,9 +1074,9 @@
 
 		<!-- Table Footer: info + pagination -->
 		<div
-			class="px-5 py-3.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/20"
+			class="flex flex-col items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/20 px-5 py-3.5 sm:flex-row"
 		>
-			<span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+			<span class="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
 				Showing {filteredStudents.length === 0
 					? 0
 					: Math.min((currentPage - 1) * pageSize + 1, filteredStudents.length)}–{Math.min(
@@ -1066,7 +1091,7 @@
 						if (currentPage > 1) currentPage -= 1;
 					}}
 					disabled={currentPage === 1}
-					class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+					class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
 					aria-label="Previous page"
 				>
 					<svg
@@ -1075,7 +1100,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2.5"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
 					</svg>
@@ -1084,9 +1109,9 @@
 				{#each Array.from({ length: totalPages }, (_, i) => i + 1) as page}
 					<button
 						onclick={() => (currentPage = page)}
-						class="w-8 h-8 flex items-center justify-center rounded-lg border text-xs font-extrabold transition-colors {currentPage ===
+						class="flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-extrabold transition-colors {currentPage ===
 						page
-							? 'bg-[#881B1B] text-white border-[#881B1B]'
+							? 'border-[#881B1B] bg-[#881B1B] text-white'
 							: 'border-slate-200 text-slate-600 hover:bg-slate-100'}"
 					>
 						{page}
@@ -1098,7 +1123,7 @@
 						if (currentPage < totalPages) currentPage += 1;
 					}}
 					disabled={currentPage === totalPages}
-					class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+					class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
 					aria-label="Next page"
 				>
 					<svg
@@ -1107,7 +1132,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2.5"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
 					</svg>
@@ -1123,25 +1148,25 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		transition:fade={{ duration: 150 }}
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs"
 		onclick={closeModal}
 	>
 		<div
 			onclick={(e) => e.stopPropagation()}
-			class="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans"
+			class="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white font-sans shadow-2xl"
 		>
 			<!-- Modal Header -->
-			<div class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30">
+			<div class="border-slate-150 flex items-center justify-between border-b bg-slate-50/30 p-5">
 				<div>
-					<h3 class="text-sm font-bold font-serif text-inst-navy">Student Profile</h3>
-					<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+					<h3 class="text-inst-navy font-serif text-sm font-bold">Student Profile</h3>
+					<p class="mt-0.5 text-[9px] font-bold tracking-widest text-slate-400 uppercase">
 						ID: {activeStudent.id} · Batch {activeStudent.batch}
 					</p>
 				</div>
 				<button
 					onclick={closeModal}
 					aria-label="Close modal"
-					class="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+					class="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -1149,7 +1174,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-5 h-5"
+						class="h-5 w-5"
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
 					</svg>
@@ -1157,62 +1182,62 @@
 			</div>
 
 			<!-- Modal Body -->
-			<div class="p-6 space-y-5 overflow-y-auto max-h-[65vh]">
+			<div class="max-h-[65vh] space-y-5 overflow-y-auto p-6">
 				<!-- Avatar + Name -->
 				<div class="flex items-center gap-4">
 					<div
-						class="w-14 h-14 rounded-full bg-[#881B1B] text-white flex items-center justify-center font-bold text-lg border-2 border-white shadow-md font-serif shrink-0"
+						class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#881B1B] font-serif text-lg font-bold text-white shadow-md"
 					>
 						{initials(activeStudent.name)}
 					</div>
 					<div class="flex-grow">
-						<div class="font-bold text-lg text-slate-900 font-serif">{activeStudent.name}</div>
-						<div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+						<div class="font-serif text-lg font-bold text-slate-900">{activeStudent.name}</div>
+						<div class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
 							{activeStudent.regNo}
 						</div>
-						<div class="text-[10px] text-slate-500 font-semibold">{activeStudent.email}</div>
+						<div class="text-[10px] font-semibold text-slate-500">{activeStudent.email}</div>
 					</div>
 					<span
-						class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide {statusClass(
+						class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-extrabold tracking-wide uppercase {statusClass(
 							activeStudent.status
 						)}"
 					>
-						<span class="w-1.5 h-1.5 rounded-full {statusDot(activeStudent.status)}"></span>
+						<span class="h-1.5 w-1.5 rounded-full {statusDot(activeStudent.status)}"></span>
 						{activeStudent.status}
 					</span>
 				</div>
 
 				<!-- Info Grid -->
-				<div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-150">
+				<div class="border-slate-150 grid grid-cols-2 gap-4 rounded-xl border bg-slate-50 p-4">
 					<div>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Department</span
 						>
-						<span class="text-xs font-bold text-slate-800 block mt-0.5"
+						<span class="mt-0.5 block text-xs font-bold text-slate-800"
 							>{activeStudent.department}</span
 						>
 					</div>
 					<div>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Semester</span
 						>
-						<span class="text-xs font-bold text-slate-800 block mt-0.5"
+						<span class="mt-0.5 block text-xs font-bold text-slate-800"
 							>{activeStudent.semester}th Semester</span
 						>
 					</div>
 					<div>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Certificates</span
 						>
-						<span class="text-xs font-bold text-[#881B1B] block mt-0.5"
+						<span class="mt-0.5 block text-xs font-bold text-[#881B1B]"
 							>{activeStudent.certificates} uploaded</span
 						>
 					</div>
 					<div>
-						<span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block"
+						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Activities</span
 						>
-						<span class="text-xs font-bold text-slate-800 block mt-0.5"
+						<span class="mt-0.5 block text-xs font-bold text-slate-800"
 							>{activeStudent.activityCount} logged</span
 						>
 					</div>
@@ -1221,14 +1246,14 @@
 				<!-- Credits Progress -->
 				<div class="space-y-2">
 					<div class="flex items-center justify-between">
-						<span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"
+						<span class="text-[10px] font-bold tracking-wider text-slate-500 uppercase"
 							>Credit Progress</span
 						>
 						<span class="text-[10px] font-extrabold text-slate-700">
 							{activeStudent.creditsEarned} / {activeStudent.creditsTarget}
 						</span>
 					</div>
-					<div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+					<div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
 						<div
 							class="h-full rounded-full transition-all duration-500 {activeStudent.creditsEarned >=
 							150
@@ -1242,7 +1267,7 @@
 							)}%"
 						></div>
 					</div>
-					<div class="flex justify-between text-[9px] font-bold text-slate-400 px-0.5">
+					<div class="flex justify-between px-0.5 text-[9px] font-bold text-slate-400">
 						<span>0</span>
 						<span>50</span>
 						<span>100</span>
@@ -1253,18 +1278,15 @@
 			</div>
 
 			<!-- Modal Footer -->
-			<div class="p-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/20">
+			<div class="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/20 p-4">
 				<button
 					onclick={closeModal}
-					class="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none"
+					class="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none"
 				>
 					Close
 				</button>
 				<button
-					onclick={() => {
-						triggerToast(`Sending notice to ${activeStudent?.name}...`);
-						closeModal();
-					}}
+					onclick={handleSendNotice}
 					class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#881B1B] hover:bg-[#881B1B]/90 rounded-lg transition-colors focus:outline-none shadow-xs"
 				>
 					<svg
@@ -1273,7 +1295,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"
@@ -1285,7 +1307,7 @@
 				</button>
 				<button
 					onclick={() => activeStudent && openStudentDetail(activeStudent)}
-					class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#881B1B] hover:bg-[#881B1B]/90 rounded-lg transition-colors focus:outline-none shadow-xs"
+					class="inline-flex items-center gap-1.5 rounded-lg bg-[#881B1B] px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#881B1B]/90 focus:outline-none"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -1293,7 +1315,7 @@
 						viewBox="0 0 24 24"
 						stroke-width="2"
 						stroke="currentColor"
-						class="w-3.5 h-3.5"
+						class="h-3.5 w-3.5"
 					>
 						<path
 							stroke-linecap="round"

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -69,13 +70,28 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	// Basic Validation
-	if input.Name == "" || input.RollNo == "" || input.CourseName == "" || input.Semester <= 0 ||
+	if input.Name == "" || input.RollNo == "" || input.CourseName == "" || input.Semester < 1 || input.Semester > 10 ||
 		input.ContactNo == "" || input.EmailID == "" || input.EnrollmentNo == "" ||
 		input.Password == "" || input.ConfirmPassword == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "All fields are required and semester must be greater than 0",
+			"error": "All fields are required and semester must be between 1 and 10",
 		})
 	}
+
+	input.EmailID = utils.NormalizeEmail(input.EmailID)
+	if !utils.ValidateEmail(input.EmailID) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid email address format",
+		})
+	}
+
+	canonicalCourse, validCourse := models.NormalizeCourseName(input.CourseName)
+	if !validCourse {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Course must be one of the supported programmes",
+		})
+	}
+	input.CourseName = canonicalCourse
 
 	if input.Password != input.ConfirmPassword {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -85,20 +101,20 @@ func Register(c *fiber.Ctx) error {
 
 	// Check if student already exists (by RollNo, EmailID, or EnrollmentNo)
 	var existingStudent models.Student
-	result := config.DB.Where("roll_no = ? OR email_id = ? OR enrollment_no = ?", input.RollNo, input.EmailID, input.EnrollmentNo).First(&existingStudent)
+	result := config.DB.Where("roll_no = ? OR LOWER(email_id) = ? OR enrollment_no = ?", input.RollNo, input.EmailID, input.EnrollmentNo).First(&existingStudent)
 	if result.Error == nil {
 		// If the existing student is not verified yet, we can delete the record to allow re-registration
 		if !existingStudent.IsVerified {
 			config.DB.Unscoped().Delete(&existingStudent)
 			// Also clean up any pending OTPs for this email to prevent conflict
-			config.DB.Where("email = ? AND purpose = ?", existingStudent.EmailID, "register").Delete(&models.OTP{})
+			config.DB.Where("LOWER(email) = ? AND purpose = ?", existingStudent.EmailID, "register").Delete(&models.OTP{})
 		} else {
 			if existingStudent.RollNo == input.RollNo {
 				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 					"error": "Student with this Roll Number already exists",
 				})
 			}
-			if existingStudent.EmailID == input.EmailID {
+			if strings.ToLower(existingStudent.EmailID) == input.EmailID {
 				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 					"error": "Student with this Email ID already exists",
 				})
@@ -109,6 +125,15 @@ func Register(c *fiber.Ctx) error {
 				})
 			}
 		}
+	}
+
+	// Cross-table case-insensitive check against Admins
+	var adminCount int64
+	config.DB.Model(&models.Admin{}).Where("LOWER(email) = ?", input.EmailID).Count(&adminCount)
+	if adminCount > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error": "An admin with this email already exists",
+		})
 	}
 
 	// Hash password
@@ -132,6 +157,7 @@ func Register(c *fiber.Ctx) error {
 		EnrollmentNo: input.EnrollmentNo,
 		Password:     hashedPassword,
 		IsVerified:   false,
+		Status:       "Pending",
 	}
 
 	if err := config.DB.Create(&student).Error; err != nil {
@@ -195,9 +221,11 @@ func VerifyOTP(c *fiber.Ctx) error {
 		})
 	}
 
+	input.Email = utils.NormalizeEmail(input.Email)
+
 	// Find the OTP code in database
 	var otp models.OTP
-	err := config.DB.Where("email = ? AND code = ? AND purpose = ? AND expires_at > ?",
+	err := config.DB.Where("LOWER(email) = ? AND code = ? AND purpose = ? AND expires_at > ?",
 		input.Email, input.Code, "register", time.Now()).First(&otp).Error
 
 	if err != nil {
@@ -208,13 +236,14 @@ func VerifyOTP(c *fiber.Ctx) error {
 
 	// Mark student as verified
 	var student models.Student
-	if err := config.DB.Where("email_id = ?", input.Email).First(&student).Error; err != nil {
+	if err := config.DB.Where("LOWER(email_id) = ?", input.Email).First(&student).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Student account not found",
 		})
 	}
 
 	student.IsVerified = true
+	student.Status = "Active"
 	if err := config.DB.Save(&student).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to verify student account",
@@ -282,6 +311,8 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
+	input.EmailID = utils.NormalizeEmail(input.EmailID)
+
 	// Captcha verification (Required)
 	if input.CaptchaID == "" || input.CaptchaAnswer == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -298,7 +329,7 @@ func Login(c *fiber.Ctx) error {
 
 	// Retrieve student
 	var student models.Student
-	err = config.DB.Where("email_id = ?", input.EmailID).First(&student).Error
+	err = config.DB.Where("LOWER(email_id) = ?", input.EmailID).First(&student).Error
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid credentials",
@@ -313,6 +344,12 @@ func Login(c *fiber.Ctx) error {
 	}
 
 	// Verify if account is activated via OTP
+	if student.Status == "Inactive" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Your account is inactive. Please contact the administrator.",
+		})
+	}
+
 	if !student.IsVerified {
 		// Send a new verification OTP
 		otpCode, err := utils.GenerateOTP()
@@ -449,9 +486,11 @@ func ForgotPassword(c *fiber.Ctx) error {
 		})
 	}
 
+	input.EmailID = utils.NormalizeEmail(input.EmailID)
+
 	// Check if student exists
 	var student models.Student
-	err := config.DB.Where("email_id = ?", input.EmailID).First(&student).Error
+	err := config.DB.Where("LOWER(email_id) = ?", input.EmailID).First(&student).Error
 	if err != nil {
 		// To prevent email harvesting, return a success message even if the email is not registered
 		return c.JSON(fiber.Map{
@@ -468,7 +507,7 @@ func ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	// Invalidate any older forgot_password OTPs for this email
-	config.DB.Where("email = ? AND purpose = ?", input.EmailID, "forgot_password").Delete(&models.OTP{})
+	config.DB.Where("LOWER(email) = ? AND purpose = ?", input.EmailID, "forgot_password").Delete(&models.OTP{})
 
 	// Save new OTP
 	otp := models.OTP{
@@ -510,6 +549,8 @@ func ResetPassword(c *fiber.Ctx) error {
 		})
 	}
 
+	input.EmailID = utils.NormalizeEmail(input.EmailID)
+
 	if input.Password != input.ConfirmPassword {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Password and Confirm Password do not match",
@@ -518,7 +559,7 @@ func ResetPassword(c *fiber.Ctx) error {
 
 	// Check OTP Validity
 	var otp models.OTP
-	err := config.DB.Where("email = ? AND code = ? AND purpose = ? AND expires_at > ?",
+	err := config.DB.Where("LOWER(email) = ? AND code = ? AND purpose = ? AND expires_at > ?",
 		input.EmailID, input.OTPCode, "forgot_password", time.Now()).First(&otp).Error
 
 	if err != nil {
@@ -529,7 +570,7 @@ func ResetPassword(c *fiber.Ctx) error {
 
 	// Update password
 	var student models.Student
-	if err := config.DB.Where("email_id = ?", input.EmailID).First(&student).Error; err != nil {
+	if err := config.DB.Where("LOWER(email_id) = ?", input.EmailID).First(&student).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Student account not found",
 		})

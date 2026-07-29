@@ -43,6 +43,7 @@ func SetupRoutes(app *fiber.App) {
 	student.Get("/enrollments", controllers.GetEnrollments)
 	student.Get("/dashboard/stats", controllers.GetDashboardStats)
 	student.Get("/marksheet", controllers.GetMarksheet)
+	student.Get("/notifications", controllers.GetStudentNotifications)
 
 	// Admin
 	api.Post("/admin/auth/login", controllers.AdminLogin)
@@ -57,36 +58,90 @@ func SetupRoutes(app *fiber.App) {
 	// Must change the password
 	admin.Post("/change-password", controllers.AdminChangePassword)
 
-	admin.Get("/profile", controllers.GetAdminProfile)
-	admin.Put("/profile", controllers.UpdateAdminProfile)
+	// Admin Portal Dashboard
+	admin.Get("/dashboard/stats", controllers.GetAdminDashboardStats)
+	admin.Get("/dashboard/recent-activities", controllers.GetRecentActivities)
+
 	admin.Get("/students", controllers.GetAllStudents)
 	admin.Get("/students/:roll", controllers.GetStudentDetail)
-
-	// Certificate verification (batch-scoped for admins, all for super admin)
-	admin.Get("/certificates", controllers.GetAdminCertificates)
-	admin.Get("/certificates/:id/file", controllers.DownloadAdminCertificate)
+	admin.Get("/students/:roll/observations", controllers.GetMentorObservations)
+	admin.Post("/students/:roll/observations", controllers.AddMentorObservation)
+	admin.Put("/students/:roll/observations/:id", controllers.EditMentorObservation)
+	admin.Post("/students/:roll/notice", controllers.SendStudentNotice)
+	// Admin profile
+	admin.Get("/profile", controllers.GetAdminProfile)
+	admin.Put("/profile", controllers.UpdateAdminProfile)
+	// Certificates
+	admin.Get("/certificates", controllers.GetCertificatesQueue)
+	admin.Get("/certificates/queue", controllers.GetCertificatesQueue)
+	admin.Get("/certificates/:id/download", controllers.AdminDownloadCertificate)
+	admin.Get("/certificates/:id/file", controllers.AdminDownloadCertificate)
 	admin.Post("/certificates/:id/approve", controllers.ApproveCertificate)
 	admin.Post("/certificates/:id/reject", controllers.RejectCertificate)
+	// Batch Analytics
+	admin.Get("/batch-analytics/export", controllers.ExportBatchReport)
+	admin.Get("/batch-analytics/reports/export", controllers.ExportBatchReport)
+	admin.Get("/batch-analytics", controllers.GetBatchAnalyticsOverview)
+	admin.Get("/batch-analytics/:batch", controllers.GetBatchDetail)
+	admin.Put("/batch-analytics/:batch", controllers.UpdateBatchAnalytics)
+
+	// Activity Monitoring API
+	admin.Get("/monitoring/stats", controllers.GetActivityMonitoringStats)
+	admin.Get("/monitoring/activities", controllers.GetMonitoredActivities)
+	admin.Put("/monitoring/activities/:id", controllers.UpdateMonitoredActivity)
+	admin.Get("/monitoring/insights", controllers.GetMonitoringInsights)
+	admin.Get("/monitoring/attention-students", controllers.GetStudentsRequiringAttention)
+	admin.Post("/monitoring/send-reminder", controllers.SendActivityMonitoringReminder)
 
 	// Platform-wide routes, super admin only
 	platform := admin.Group("/platform", middleware.RoleRequired("superadmin"))
 	platform.Get("/stats", controllers.GetPlatformStats)
 	platform.Get("/users", controllers.GetPlatformUsers)
 	platform.Post("/users", controllers.CreatePlatformUser)
+	platform.Put("/users/:id", controllers.UpdatePlatformUser)
 	platform.Delete("/users/:id", controllers.DeletePlatformUser)
+	platform.Get("/activities", controllers.GetPlatformActivities)
+	platform.Post("/activities", controllers.CreatePlatformActivity)
+	platform.Put("/activities/:id", controllers.UpdatePlatformActivity)
+	platform.Delete("/activities/:id", controllers.DeletePlatformActivity)
 
-	// System settings
-	platform.Get("/settings", controllers.GetPlatformSettings)
-	platform.Put("/settings", controllers.UpdatePlatformSettings)
-	platform.Put("/settings/:key", controllers.UpdatePlatformSetting)
-
-	// Track management
+	// Track management. The controllers and their tests exist upstream but the
+	// routes were dropped, which 404s the Track Management page and the track
+	// filter on Activity Management. "/tracks/stats" stays above "/tracks/:id"
+	// so the literal path is not shadowed by the parameter route.
 	platform.Get("/tracks/stats", controllers.GetTrackStats)
 	platform.Get("/tracks", controllers.GetTracks)
 	platform.Post("/tracks", controllers.CreateTrack)
 	platform.Get("/tracks/:id", controllers.GetTrack)
 	platform.Put("/tracks/:id", controllers.UpdateTrack)
 	platform.Delete("/tracks/:id", controllers.DeleteTrack)
+
+	// System settings
+	platform.Get("/settings", controllers.GetPlatformSettings)
+	platform.Put("/settings", controllers.UpdatePlatformSettings)
+	platform.Put("/settings/:key", controllers.UpdatePlatformSetting)
+
+	// Reports center
+	platform.Get("/reports/summary", controllers.GetReportsSummary)
+	platform.Get("/reports/templates", controllers.GetReportTemplates)
+	platform.Get("/reports/export/counts", controllers.GetExportCounts)
+	platform.Get("/reports/export", controllers.ExportData)
+	platform.Get("/reports/audit", controllers.GetReportAuditLog)
+	platform.Get("/reports/institutional", controllers.GetInstitutionalOverview)
+	platform.Get("/reports/filters", controllers.GetReportFilters)
+
+	// Reports center: scheduled reports
+	platform.Get("/reports/scheduled", controllers.GetScheduledReports)
+	platform.Post("/reports/scheduled", controllers.CreateScheduledReport)
+	platform.Put("/reports/scheduled/:id", controllers.UpdateScheduledReport)
+	platform.Delete("/reports/scheduled/:id", controllers.DeleteScheduledReport)
+
+	// Reports center: generated reports
+	platform.Get("/reports", controllers.GetGeneratedReports)
+	platform.Post("/reports/generate", controllers.GenerateReport)
+	platform.Get("/reports/:id", controllers.GetReportDetail)
+	platform.Get("/reports/:id/download", controllers.DownloadReport)
+	platform.Delete("/reports/:id", controllers.DeleteReport)
 
 	// Announcement management
 	platform.Get("/announcements/stats", controllers.GetAnnouncementStats)

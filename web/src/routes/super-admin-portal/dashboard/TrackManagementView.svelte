@@ -24,8 +24,6 @@
 		return { Authorization: `Bearer ${localStorage.getItem('superadmin_token')}` };
 	}
 
-	// unauthorized bounces the user back to sign-in on a 401 and reports whether
-	// the caller should stop.
 	async function unauthorized(res: Response): Promise<boolean> {
 		if (res.status === 401) {
 			localStorage.removeItem('superadmin_token');
@@ -43,19 +41,21 @@
 				triggerToast('Could not load tracks. Please try again.');
 				return;
 			}
-			const { tracks: loaded } = await res.json();
-			tracks = (loaded ?? []).map(
+			const data = await res.json();
+			const loaded = data.tracks || [];
+			tracks = loaded.map(
 				(t: {
 					id: number;
 					name: string;
 					description: string;
 					status: TrackStatus;
-					total_activities: number;
+					totalActivities?: number;
+					total_activities?: number;
 				}) => ({
 					id: t.id,
 					name: t.name,
 					description: t.description,
-					totalActivities: t.total_activities,
+					totalActivities: t.totalActivities ?? t.total_activities ?? 0,
 					status: t.status
 				})
 			);
@@ -209,7 +209,6 @@
 			if (await unauthorized(res)) return;
 
 			if (!res.ok) {
-				// A 409 here means the track still has activities assigned to it.
 				const data = await res.json().catch(() => ({}));
 				triggerToast(data.error ?? 'Failed to delete track');
 				return;

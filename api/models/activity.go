@@ -10,7 +10,9 @@ type Activity struct {
 	ID            uint           `gorm:"primaryKey" json:"id"`
 	Name          string         `gorm:"type:varchar(255);not null" json:"name"`
 	Category      string         `gorm:"type:varchar(100);not null" json:"category"` // TECHNICAL, SPORTS, CULTURAL, SOCIAL SERVICE, RESEARCH, PUBLIC SPEAKING, LEADERSHIP, etc.
-	TrackID       *uint          `gorm:"index" json:"track_id"`                      // optional grouping under a Track (super admin Track Management)
+	TrackID       *uint          `gorm:"index" json:"track_id,omitempty"`
+	Track         Track          `gorm:"foreignKey:TrackID" json:"track,omitempty"`
+	Type          string         `gorm:"type:varchar(100)" json:"type"` // Workshop, Seminar, Webinar, Course
 	Description   string         `gorm:"type:text" json:"description"`
 	Credits       int            `gorm:"not null" json:"credits"`
 	Mode          string         `gorm:"type:varchar(50);not null" json:"mode"` // Online, Offline, Hybrid

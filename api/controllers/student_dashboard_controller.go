@@ -29,6 +29,58 @@ var allowedCertificateTypes = map[string]string{
 // max certificate file size is 5 MB but i highly doublt that we should keep it 5 MB.
 const maxCertificateSize = 5 * 1024 * 1024
 
+// StudentNotificationResponse represents notification items sent to the student portal.
+type StudentNotificationResponse struct {
+	ID        uint      `json:"id"`
+	Text      string    `json:"text"`
+	Author    string    `json:"author"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+	Time      string    `json:"time"`
+	Unread    bool      `json:"unread"`
+}
+
+// GetStudentNotifications handles GET /api/student/notifications
+func GetStudentNotifications(c *fiber.Ctx) error {
+	rollNo, ok := c.Locals("roll_no").(string)
+	if !ok || rollNo == "" {
+		return errJSON(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	var notes []models.AdminNote
+	if err := config.DB.Where("student_roll_no = ?", rollNo).Order("created_at desc").Find(&notes).Error; err != nil {
+		return errJSON(c, fiber.StatusInternalServerError, "Failed to fetch notifications")
+	}
+
+	response := make([]StudentNotificationResponse, 0, len(notes))
+	for _, note := range notes {
+		timeAgo := time.Since(note.CreatedAt)
+		timeStr := "Just now"
+		if timeAgo.Hours() >= 24 {
+			timeStr = fmt.Sprintf("%d days ago", int(timeAgo.Hours()/24))
+		} else if timeAgo.Hours() >= 1 {
+			timeStr = fmt.Sprintf("%d hours ago", int(timeAgo.Hours()))
+		} else if timeAgo.Minutes() >= 1 {
+			timeStr = fmt.Sprintf("%d mins ago", int(timeAgo.Minutes()))
+		}
+
+		cleanText := strings.TrimPrefix(note.Text, "[ALERT REMINDER] ")
+		cleanText = strings.TrimPrefix(cleanText, "[NOTICE] ")
+
+		response = append(response, StudentNotificationResponse{
+			ID:        note.ID,
+			Text:      cleanText,
+			Author:    note.AuthorName,
+			Role:      note.Role,
+			CreatedAt: note.CreatedAt,
+			Time:      timeStr,
+			Unread:    true,
+		})
+	}
+
+	return c.JSON(response)
+}
+
 // GetCertificates returns student's uploaded certificates
 func GetCertificates(c *fiber.Ctx) error {
 	rollNo := c.Locals("roll_no").(string)
@@ -431,6 +483,23 @@ func UpdateProfile(c *fiber.Ctx) error {
 
 	// Update fields if provided
 	if input.EmailID != "" {
+		input.EmailID = utils.NormalizeEmail(input.EmailID)
+		if !utils.ValidateEmail(input.EmailID) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid email address format",
+			})
+		}
+		if input.EmailID != student.EmailID {
+			var count int64
+			config.DB.Model(&models.Student{}).Where("LOWER(email_id) = ? AND roll_no != ?", input.EmailID, student.RollNo).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "A student with this email already exists"})
+			}
+			config.DB.Model(&models.Admin{}).Where("LOWER(email) = ?", input.EmailID).Count(&count)
+			if count > 0 {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An admin with this email already exists"})
+			}
+		}
 		student.EmailID = input.EmailID
 	}
 	if input.ContactNo != "" {

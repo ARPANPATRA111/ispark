@@ -30,6 +30,10 @@ func main() {
 	// Initialize Database
 	config.ConnectDB()
 
+	// Data migrations that must run on every boot (e.g. canonicalising legacy
+	// course names), independent of demo seeding.
+	config.RunMigrations()
+
 	// Demo data for local development only (see SEED_DEV_DATA)
 	config.SeedDevData()
 

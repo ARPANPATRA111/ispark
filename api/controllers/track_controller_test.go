@@ -318,3 +318,71 @@ func TestGetTrackStats(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteAssignedTrackBlockedWithMultipleActivities(t *testing.T) {
+	app := setupTrackApp(t)
+	track := seedTrack(t, "Personality Development", "Seeded track", "Active")
+
+	// Seed 5 activities assigned to this track
+	for i := 1; i <= 5; i++ {
+		seedActivityForTrack(t, fmt.Sprintf("Activity %d", i), track.ID)
+	}
+
+	res, body := doJSON(t, app, http.MethodDelete, fmt.Sprintf("/tracks/%d", track.ID), nil)
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict when 5 activities are linked, got %d (%v)", res.StatusCode, body)
+	}
+
+	errMsg, _ := body["error"].(string)
+	if !strings.Contains(errMsg, "Cannot delete a track that still has activities assigned to it") {
+		t.Errorf("expected deletion blocked message, got %q", errMsg)
+	}
+
+	var count int64
+	config.DB.Model(&models.Track{}).Where("id = ?", track.ID).Count(&count)
+	if count != 1 {
+		t.Errorf("expected track to survive deletion attempt, found count = %d", count)
+	}
+}
+
+func TestCreateAndFilterNewlyCreatedTrack(t *testing.T) {
+	app := setupTrackApp(t)
+
+	// 1. Create a new track "Research and Innovation"
+	res, body := doJSON(t, app, http.MethodPost, "/tracks", map[string]any{
+		"name":        "Research and Innovation",
+		"description": "Activities focused on research and creative innovation.",
+		"status":      "Active",
+	})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d (%v)", res.StatusCode, body)
+	}
+
+	trackData, ok := body["track"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected track object in response, got %v", body)
+	}
+	trackID := uint(trackData["id"].(float64))
+
+	// 2. Assign an activity to it
+	seedActivityForTrack(t, "Paper Presentation", trackID)
+
+	// 3. GET /tracks?q=Research
+	resSearch, bodySearch := doJSON(t, app, http.MethodGet, "/tracks?q=Research", nil)
+	if resSearch.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for search query, got %d", resSearch.StatusCode)
+	}
+
+	tracksArr, ok := bodySearch["tracks"].([]any)
+	if !ok || len(tracksArr) != 1 {
+		t.Fatalf("expected 1 track matching 'Research', got %v", bodySearch["tracks"])
+	}
+
+	foundTrack := tracksArr[0].(map[string]any)
+	if foundTrack["name"] != "Research and Innovation" {
+		t.Errorf("expected track name 'Research and Innovation', got %v", foundTrack["name"])
+	}
+	if foundTrack["total_activities"].(float64) != 1 {
+		t.Errorf("expected total_activities = 1, got %v", foundTrack["total_activities"])
+	}
+}

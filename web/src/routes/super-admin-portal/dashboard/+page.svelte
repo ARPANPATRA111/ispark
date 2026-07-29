@@ -16,6 +16,8 @@
 		dept: string;
 		status: string;
 		avatarBg: string;
+		email?: string;
+		semester?: number;
 	}
 
 	interface PlatformStats {
@@ -96,7 +98,7 @@
 			return;
 		}
 
-		await Promise.all([loadPlatformData(), loadSettings()]);
+		await Promise.all([loadPlatformData(), loadSettings(), loadReportsData()]);
 	});
 
 	// Sidebar menu items list for Super Admin Portal
@@ -174,8 +176,8 @@
 			const matchesFilter =
 				userFilter === 'All' ||
 				(userFilter === 'Student' && user.role === 'Student') ||
-				(userFilter === 'Mentor' && user.displayRole === 'Mentor') ||
-				(userFilter === 'Admin' && user.displayRole === 'Admin');
+				(userFilter === 'Admin' &&
+					(user.displayRole === 'Admin' || user.displayRole === 'Super Admin'));
 
 			const matchesSearch =
 				user.name.toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -189,13 +191,15 @@
 	// Counted from the real registry. These used to add a fixed number to each
 	// count, which made every figure on this page fictional.
 	let totalStudentsCount = $derived(userRegistry.filter((u) => u.role === 'Student').length);
-	let totalMentorsCount = $derived(userRegistry.filter((u) => u.displayRole === 'Mentor').length);
 	let totalAdminsCount = $derived(
 		userRegistry.filter((u) => u.displayRole === 'Admin' || u.displayRole === 'Super Admin').length
 	);
 	let activeUsersCount = $derived(userRegistry.filter((u) => u.status === 'Active').length);
 	let pendingUsersCount = $derived(userRegistry.filter((u) => u.status === 'Pending').length);
 	let inactiveUsersCount = $derived(userRegistry.filter((u) => u.status === 'Inactive').length);
+	let activeRate = $derived(
+		userRegistry.length > 0 ? ((activeUsersCount / userRegistry.length) * 100).toFixed(1) : '0.0'
+	);
 
 	// Mock Recent System Activities (Step 5)
 	let recentLogs = $state([
@@ -246,6 +250,7 @@
 	// Action modals states (Step 6)
 	let isCreateUserModalOpen = $state(false);
 	let isCreateActivityModalOpen = $state(false);
+	let isManageActivityModalOpen = $state(false);
 	let isCreateTrackModalOpen = $state(false);
 	let isGenerateReportModalOpen = $state(false);
 
@@ -258,6 +263,77 @@
 	let newUserSemester = $state(1);
 	let createUserError = $state('');
 	let creatingUser = $state(false);
+
+	// View / Edit user modal states
+	let isViewUserModalOpen = $state(false);
+	let viewingUser = $state<PlatformUser | null>(null);
+
+	let isEditUserModalOpen = $state(false);
+	let editingUser = $state<PlatformUser | null>(null);
+
+	let editUserName = $state('');
+	let editUserEmail = $state('');
+	let editUserDept = $state('');
+	let editUserSemester = $state(1);
+	let editUserStatus = $state('Active');
+	let editUserError = $state('');
+	let editingUserSubmit = $state(false);
+
+	function openViewUser(user: PlatformUser) {
+		viewingUser = user;
+		isViewUserModalOpen = true;
+	}
+
+	function openEditUser(user: PlatformUser) {
+		editingUser = user;
+		editUserName = user.name;
+		editUserEmail = user.email || '';
+		editUserDept = user.dept;
+		editUserSemester = user.semester || 1;
+		editUserStatus = user.status || 'Active';
+		editUserError = '';
+		isEditUserModalOpen = true;
+	}
+
+	async function handleSaveEditUser(e: Event) {
+		e.preventDefault();
+		if (!editingUser || editingUserSubmit) return;
+
+		editUserError = '';
+		editingUserSubmit = true;
+
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/admin/platform/users/${editingUser.id}`, {
+				method: 'PUT',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: editUserName,
+					email: editUserEmail,
+					dept: editUserDept,
+					semester: Number(editUserSemester),
+					status: editUserStatus
+				})
+			});
+
+			let data = { error: '' };
+			try {
+				data = await res.json();
+			} catch (err) {
+				console.warn(err);
+			}
+			if (!res.ok) {
+				throw new Error(data.error || 'Failed to update user');
+			}
+
+			triggerToast(`User "${editUserName}" updated successfully!`);
+			await loadPlatformData();
+			isEditUserModalOpen = false;
+		} catch (err) {
+			editUserError = err instanceof Error ? err.message : 'Failed to update user';
+		} finally {
+			editingUserSubmit = false;
+		}
+	}
 	let newActivityName = $state('');
 	let newActivityCredits = $state(5);
 	let newTrackName = $state('');
@@ -427,12 +503,18 @@
 	let toasts = $state<Toast[]>([]);
 	let toastCounter = 0;
 
-	function triggerToast(message: string) {
+	function triggerToast(message: string, duration = 3000) {
 		const id = toastCounter++;
 		toasts = [...toasts, { id, message }];
-		setTimeout(() => {
-			toasts = toasts.filter((t) => t.id !== id);
-		}, 3000);
+		if (duration > 0) {
+			setTimeout(() => {
+				toasts = toasts.filter((t) => t.id !== id);
+			}, duration);
+		}
+	}
+
+	function dismissToast(id: number) {
+		toasts = toasts.filter((t) => t.id !== id);
 	}
 
 	async function handleCreateUser(e: Event) {
@@ -456,7 +538,12 @@
 				})
 			});
 
-			const data = await res.json();
+			let data = { error: '', temporary_password: '' };
+			try {
+				data = await res.json();
+			} catch (err) {
+				console.warn(err);
+			}
 
 			if (!res.ok) {
 				throw new Error(data.error || 'Failed to create user');
@@ -482,7 +569,14 @@
 			];
 
 			// Shown once: the account has no other way to get its first password.
-			triggerToast(`"${newUserName}" created. Temporary password: ${data.temporary_password}`);
+			if (newUserRole === 'Student') {
+				triggerToast(
+					`"${newUserName}" created. Temporary password: ${data.temporary_password} (Student must verify email OTP on first login)`,
+					0
+				);
+			} else {
+				triggerToast(`"${newUserName}" created. Temporary password: ${data.temporary_password}`, 0);
+			}
 
 			newUserName = '';
 			newUserDept = '';
@@ -506,7 +600,12 @@
 				headers: authHeaders()
 			});
 
-			const data = await res.json();
+			let data = { error: '' };
+			try {
+				data = await res.json();
+			} catch (err) {
+				console.warn(err);
+			}
 
 			if (!res.ok) {
 				throw new Error(data.error || 'Failed to delete user');
@@ -565,12 +664,22 @@
 	type ReportFormat = 'PDF' | 'Excel' | 'CSV';
 
 	interface GeneratedReport {
+		id: number;
 		name: string;
 		by: string;
 		date: string;
 		format: ReportFormat;
 		status: ReportStatus;
+		fileName: string;
+		// Original generation parameters, kept so a failed report can be retried.
+		type: string;
+		course: string;
+		semester: string;
+		dateFrom: string;
+		dateTo: string;
 	}
+
+	const reportsBase = `${API_BASE_URL}/api/admin/platform/reports`;
 
 	// Generate form state
 	const reportTypes = [
@@ -583,193 +692,383 @@
 		'Leaderboard Rankings',
 		'Semester Summary'
 	];
-	const reportCourses = ['All Courses', 'Mtech CS', 'Mtech IT', 'MBA', 'MCA'];
-	const reportSemesters = ['All Semesters', 'Semester 1', 'Semester 2', 'Semester 3', 'Semester 4'];
-	const reportFormats: ReportFormat[] = ['PDF', 'Excel', 'CSV'];
+	// Course and semester options are loaded from the API (canonical student data)
+	// so they never drift from the seeded/registered course names. "All …" is
+	// prepended as the no-filter choice.
+	let reportCourses = $state<string[]>(['All Courses']);
+	let reportSemesters = $state<string[]>(['All Semesters']);
 
 	let reportType = $state('Student Performance');
 	let reportCourse = $state('All Courses');
 	let reportSemester = $state('All Semesters');
 	let reportFrom = $state('2025-08-01');
 	let reportTo = $state('2026-05-31');
-	let reportFormat = $state<ReportFormat>('PDF');
+	let reportFormat = $state<ReportFormat>('CSV');
 
-	// Recent reports
-	let recentReports = $state<GeneratedReport[]>([
+	// Cadence chosen when scheduling the currently-configured report.
+	const scheduleFrequencies = ['Daily', 'Weekly', 'Monthly', 'Quarterly'];
+	let scheduleFrequency = $state('Monthly');
+
+	// Which filters a given report type actually honours. Filters that do not
+	// apply are disabled in the form so the UI never implies a filter is in
+	// effect when the backend ignores it. Mentor Analytics is a per-admin batch
+	// rollup and honours none of the student-scoped filters.
+	const reportFilterSupport: Record<string, { course: boolean; semester: boolean; date: boolean }> =
 		{
-			name: 'Student Performance Report',
-			by: 'Super Admin',
-			date: 'Jun 28, 2026',
-			format: 'PDF',
-			status: 'Ready'
+			'Mentor Analytics': { course: false, semester: false, date: false }
+		};
+	function filterApplies(type: string, filter: 'course' | 'semester' | 'date'): boolean {
+		return reportFilterSupport[type]?.[filter] ?? true;
+	}
+
+	// Reports Center overview figures, loaded from the API.
+	let reportSummary = $state({
+		total_reports: 0,
+		scheduled_reports: 0,
+		monthly_downloads: 0,
+		storage_bytes: 0
+	});
+
+	// Generated reports, loaded from the API.
+	let recentReports = $state<GeneratedReport[]>([]);
+
+	// Quick templates, loaded from the API. `type` maps a template to a report type.
+	let quickTemplates = $state<{ name: string; desc: string; type: string }[]>([]);
+
+	// Scheduled reports, loaded from the API.
+	interface ScheduledReportItem {
+		id: number;
+		name: string;
+		freq: string;
+		format: string;
+		type: string;
+		enabled: boolean;
+	}
+	let scheduledReports = $state<ScheduledReportItem[]>([]);
+
+	// Export center options. Names/descriptions are fixed; `type` drives the export
+	// endpoint and `count` is refreshed from the API.
+	let exportOptions = $state([
+		{ name: 'Export Student Database', desc: 'Full student records', type: 'students', count: '—' },
+		{
+			name: 'Export Activity Records',
+			desc: 'All logged activities',
+			type: 'activities',
+			count: '—'
 		},
 		{
-			name: 'Mentor Analytics Report',
-			by: 'Super Admin',
-			date: 'Jun 27, 2026',
-			format: 'Excel',
-			status: 'Ready'
+			name: 'Export Credit Reports',
+			desc: 'Credit distribution data',
+			type: 'credits',
+			count: '—'
 		},
 		{
-			name: 'Activity Participation Report',
-			by: 'Super Admin',
-			date: 'Jun 26, 2026',
-			format: 'CSV',
-			status: 'Processing'
-		},
-		{
-			name: 'Credit Distribution Report',
-			by: 'Super Admin',
-			date: 'Jun 24, 2026',
-			format: 'PDF',
-			status: 'Ready'
-		},
-		{
-			name: 'Department-wide Report',
-			by: 'Super Admin',
-			date: 'Jun 22, 2026',
-			format: 'Excel',
-			status: 'Ready'
-		},
-		{
-			name: 'Semester Summary – Even',
-			by: 'Super Admin',
-			date: 'Jun 20, 2026',
-			format: 'PDF',
-			status: 'Ready'
-		},
-		{
-			name: 'Leaderboard Rankings Q2',
-			by: 'Super Admin',
-			date: 'Jun 18, 2026',
-			format: 'Excel',
-			status: 'Ready'
-		},
-		{
-			name: 'Certificate Verification Log',
-			by: 'Super Admin',
-			date: 'Jun 15, 2026',
-			format: 'PDF',
-			status: 'Failed'
+			name: 'Export Certificate Data',
+			desc: 'Verified certificates',
+			type: 'certificates',
+			count: '—'
 		}
 	]);
 
-	// Quick templates
-	const quickTemplates = [
-		{ name: 'Student Credit Summary', desc: 'Credits per student' },
-		{ name: 'Certificate Verification', desc: 'Approval status log' },
-		{ name: 'Activity Participation', desc: 'Enrollment vs completion' },
-		{ name: 'Batch Performance', desc: 'Batch-wise comparison' },
-		{ name: 'Mentor Activity', desc: 'Mentor engagement' },
-		{ name: 'Department Performance', desc: 'Dept-wise metrics' },
-		{ name: 'Semester Summary', desc: 'Per-semester rollup' },
-		{ name: 'System Usage Report', desc: 'Platform activity' }
-	];
+	// Report activity audit log, loaded from the API.
+	let reportAuditLog = $state<{ action: string; type: string; user: string; time: string }[]>([]);
 
-	// Scheduled reports
-	const scheduledReports = [
-		{ name: 'Monthly Student Report', freq: 'Every 1st of the month', format: 'PDF' },
-		{ name: 'Semester Summary', freq: 'End of each semester', format: 'Excel' },
-		{ name: 'Mentor Performance Report', freq: 'Weekly · Monday', format: 'PDF' },
-		{ name: 'Department Analytics', freq: 'Bi-weekly', format: 'Excel' }
-	];
+	// Institutional overview, loaded from the API.
+	let institutionalRaw = $state({
+		registered_students: 0,
+		active_students: 0,
+		activities_conducted: 0,
+		avg_credits: 0
+	});
 
-	// Export center
-	const exportOptions = [
-		{ name: 'Export Student Database', desc: 'Full student records', count: '1,248 records' },
-		{ name: 'Export Activity Records', desc: 'All logged activities', count: '3,412 records' },
-		{ name: 'Export Credit Reports', desc: 'Credit distribution data', count: '892 records' },
-		{ name: 'Export Certificate Data', desc: 'Verified certificates', count: '2,076 records' }
-	];
-
-	// Report activity audit log
-	const reportAuditLog = [
+	// Stat cards keep their fixed labels/colours; only the values come from the API.
+	const institutionalStats = $derived([
 		{
-			action: 'Student Performance Report downloaded',
-			type: 'PDF',
-			user: 'Dr. Mehta',
-			time: 'Today, 09:45 AM'
+			value: institutionalRaw.registered_students.toLocaleString(),
+			label: 'Registered Students',
+			color: 'text-indigo-600'
 		},
 		{
-			action: 'Semester Report exported to Excel',
-			type: 'Excel',
-			user: 'Super Admin',
-			time: 'Today, 08:12 AM'
+			value: institutionalRaw.active_students.toLocaleString(),
+			label: 'Active Students',
+			color: 'text-emerald-600'
 		},
 		{
-			action: 'Leaderboard Report generated',
-			type: 'CSV',
-			user: 'Admin Sharma',
-			time: 'Yesterday, 05:30 PM'
+			value: institutionalRaw.activities_conducted.toLocaleString(),
+			label: 'Activities Conducted',
+			color: 'text-purple-600'
 		},
 		{
-			action: 'Certificate Report shared with NAAC',
-			type: 'PDF',
-			user: 'Super Admin',
-			time: 'Yesterday, 02:15 PM'
-		},
-		{
-			action: 'Department-wise Report scheduled',
-			type: 'Auto',
-			user: 'Admin Verma',
-			time: '25 Jun 2026, 11:30 AM'
-		},
-		{
-			action: 'Extracurricular Marksheet downloaded',
-			type: 'Excel',
-			user: 'Dr. Mehta',
-			time: '24 Jun 2026, 03:20 PM'
+			value: institutionalRaw.avg_credits.toFixed(1),
+			label: 'Avg Credits Earned',
+			color: 'text-amber-600'
 		}
-	];
+	]);
 
-	// Institutional overview snapshot
-	const institutionalStats = [
-		{ value: '3,842', label: 'Registered Students', color: 'text-indigo-600' },
-		{ value: '3,614', label: 'Active Students', color: 'text-emerald-600' },
-		{ value: '284', label: 'Activities Conducted', color: 'text-purple-600' },
-		{ value: '18.4', label: 'Avg Credits Earned', color: 'text-amber-600' }
-	];
+	// Avg earned credits per student, per department. The chart's y-axis runs 0–100,
+	// which matches the 100-credit graduation target, so scores map directly.
+	let deptScores = $state<{ dept: string; score: number }[]>([]);
 
-	// Avg score by department (bar chart)
-	const deptScores = [
-		{ dept: 'MCA', score: 88 },
-		{ dept: 'MBA', score: 76 },
-		{ dept: 'BCA', score: 71 },
-		{ dept: 'B.Com', score: 63 },
-		{ dept: 'BBA', score: 82 },
-		{ dept: 'MSc CS', score: 85 }
-	];
+	// Monthly participation trend (dual line), loaded from the API.
+	let participationMonths = $state<string[]>([]);
+	let activitiesTrend = $state<number[]>([]);
+	let certificatesTrend = $state<number[]>([]);
 
-	// Monthly participation trend (dual line)
-	const participationMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-	const activitiesTrend = [40, 46, 50, 45, 62, 70];
-	const certificatesTrend = [36, 41, 47, 43, 54, 66];
-	const trendMax = 80;
-	const trendMin = 20;
-	const trendLine = (data: number[]) =>
-		data
+	// The trend chart scales to the data: the y-axis top is the largest value seen
+	// (floored at 4 so a near-empty chart still reads sensibly).
+	const trendMin = 0;
+	const trendMax = $derived(Math.max(4, ...activitiesTrend, ...certificatesTrend));
+	const trendAxisLabels = $derived([1, 0.75, 0.5, 0.25].map((f) => Math.round(trendMax * f)));
+
+	function trendLine(data: number[]): string {
+		return data
 			.map((v, i) => {
-				const x = (i / (data.length - 1)) * 100;
+				const x = data.length > 1 ? (i / (data.length - 1)) * 100 : 0;
 				const y = 40 - ((v - trendMin) / (trendMax - trendMin)) * 36 - 2;
 				return `${x},${y}`;
 			})
 			.join(' ');
-	const activitiesPoints = trendLine(activitiesTrend);
-	const certificatesPoints = trendLine(certificatesTrend);
+	}
+	const activitiesPoints = $derived(trendLine(activitiesTrend));
+	const certificatesPoints = $derived(trendLine(certificatesTrend));
+
+	// ── Reports Center: API wiring ──────────────────────────────────────────────
+
+	// unauthorized bounces the user back to sign-in on a 401 and reports whether
+	// the caller should stop. It mirrors the check used across the dashboard.
+	async function unauthorized(res: Response): Promise<boolean> {
+		if (res.status === 401) {
+			localStorage.removeItem('superadmin_token');
+			await goto('/super-admin-portal');
+			return true;
+		}
+		return false;
+	}
+
+	// triggerBlobDownload saves a fetched blob to the user's device. Report files
+	// sit behind an auth header, so they are fetched then downloaded rather than
+	// linked directly.
+	function triggerBlobDownload(blob: Blob, filename: string) {
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		URL.revokeObjectURL(url);
+	}
+
+	function formatReportDate(iso: string): string {
+		if (!iso) return '—';
+		return new Date(iso).toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+	}
+
+	function formatAuditTime(iso: string): string {
+		if (!iso) return '—';
+		return new Date(iso).toLocaleString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	// mapApiReport converts an API report into the shape the table renders, keeping
+	// the original parameters so a failed report can be retried.
+	function mapApiReport(r: {
+		id: number;
+		name: string;
+		type: string;
+		course: string;
+		semester: string;
+		date_from: string | null;
+		date_to: string | null;
+		format: ReportFormat;
+		status: ReportStatus;
+		file_name: string;
+		generated_by: string;
+		created_at: string;
+	}): GeneratedReport {
+		return {
+			id: r.id,
+			name: r.name,
+			by: r.generated_by || 'Super Admin',
+			date: formatReportDate(r.created_at),
+			format: r.format,
+			status: r.status,
+			fileName: r.file_name ?? '',
+			type: r.type,
+			course: r.course ?? '',
+			semester: r.semester ?? '',
+			dateFrom: r.date_from ? r.date_from.slice(0, 10) : '',
+			dateTo: r.date_to ? r.date_to.slice(0, 10) : ''
+		};
+	}
+
+	async function loadReportsData() {
+		try {
+			const [
+				summaryRes,
+				reportsRes,
+				scheduledRes,
+				countsRes,
+				auditRes,
+				templatesRes,
+				institutionalRes,
+				filtersRes
+			] = await Promise.all([
+				fetch(`${reportsBase}/summary`, { headers: authHeaders() }),
+				fetch(`${reportsBase}`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/scheduled`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/export/counts`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/audit`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/templates`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/institutional`, { headers: authHeaders() }),
+				fetch(`${reportsBase}/filters`, { headers: authHeaders() })
+			]);
+
+			if (
+				[
+					summaryRes,
+					reportsRes,
+					scheduledRes,
+					countsRes,
+					auditRes,
+					templatesRes,
+					institutionalRes,
+					filtersRes
+				].some((res) => res.status === 401)
+			) {
+				localStorage.removeItem('superadmin_token');
+				await goto('/super-admin-portal');
+				return;
+			}
+
+			if (summaryRes.ok) reportSummary = await summaryRes.json();
+
+			if (reportsRes.ok) {
+				const { reports } = await reportsRes.json();
+				recentReports = (reports ?? []).map(mapApiReport);
+			}
+
+			if (scheduledRes.ok) {
+				const { scheduled } = await scheduledRes.json();
+				scheduledReports = (scheduled ?? []).map(
+					(s: {
+						id: number;
+						name: string;
+						frequency: string;
+						format: string;
+						type: string;
+						enabled: boolean;
+					}) => ({
+						id: s.id,
+						name: s.name,
+						freq: s.frequency,
+						format: s.format,
+						type: s.type,
+						enabled: s.enabled
+					})
+				);
+			}
+
+			if (countsRes.ok) {
+				const counts: Record<string, number> = await countsRes.json();
+				exportOptions = exportOptions.map((opt) => ({
+					...opt,
+					count: `${(counts[opt.type] ?? 0).toLocaleString()} records`
+				}));
+			}
+
+			if (auditRes.ok) {
+				const { logs } = await auditRes.json();
+				reportAuditLog = (logs ?? []).map(
+					(log: {
+						action: string;
+						category: string;
+						type: string;
+						user: string;
+						created_at: string;
+					}) => ({
+						action: log.action,
+						type: log.type || log.category,
+						user: log.user || 'Super Admin',
+						time: formatAuditTime(log.created_at)
+					})
+				);
+			}
+
+			if (templatesRes.ok) {
+				const { templates } = await templatesRes.json();
+				quickTemplates = (templates ?? []).map(
+					(tpl: { name: string; description: string; type: string }) => ({
+						name: tpl.name,
+						desc: tpl.description,
+						type: tpl.type
+					})
+				);
+			}
+
+			if (institutionalRes.ok) {
+				const { stats, department_scores, trend } = await institutionalRes.json();
+				institutionalRaw = stats ?? institutionalRaw;
+				deptScores = department_scores ?? [];
+				participationMonths = trend?.months ?? [];
+				activitiesTrend = trend?.activities ?? [];
+				certificatesTrend = trend?.certificates ?? [];
+			}
+
+			if (filtersRes.ok) {
+				const { courses, semesters } = await filtersRes.json();
+				reportCourses = ['All Courses', ...(courses ?? [])];
+				reportSemesters = [
+					'All Semesters',
+					...(semesters ?? []).map((s: number) => `Semester ${s}`)
+				];
+				// Keep the current selection valid if the loaded options dropped it.
+				if (!reportCourses.includes(reportCourse)) reportCourse = 'All Courses';
+				if (!reportSemesters.includes(reportSemester)) reportSemester = 'All Semesters';
+			}
+		} catch {
+			loadError = 'Could not load reports data. Please try again.';
+		}
+	}
 
 	// Handlers
-	function runReportGeneration() {
-		recentReports = [
-			{
-				name: `${reportType} Report`,
-				by: 'Super Admin',
-				date: 'Jun 28, 2026',
-				format: reportFormat,
-				status: 'Processing'
-			},
-			...recentReports
-		];
-		triggerToast(`Generating "${reportType} Report" (${reportFormat})...`);
+	async function runReportGeneration() {
+		try {
+			const res = await fetch(`${reportsBase}/generate`, {
+				method: 'POST',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: reportType,
+					course: reportCourse,
+					semester: reportSemester,
+					date_from: reportFrom,
+					date_to: reportTo,
+					format: reportFormat
+				})
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to generate report');
+				return;
+			}
+
+			triggerToast(`"${reportType} Report" generated successfully!`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to generate report');
+		}
 	}
 
 	function resetReportForm() {
@@ -778,41 +1077,163 @@
 		reportSemester = 'All Semesters';
 		reportFrom = '2025-08-01';
 		reportTo = '2026-05-31';
-		reportFormat = 'PDF';
+		reportFormat = 'CSV';
 		triggerToast('Report filters reset.');
 	}
 
-	function downloadReport(report: GeneratedReport) {
-		triggerToast(`Downloading "${report.name}"...`);
+	async function downloadReport(report: GeneratedReport) {
+		try {
+			const res = await fetch(`${reportsBase}/${report.id}/download`, { headers: authHeaders() });
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				triggerToast('Failed to download report');
+				return;
+			}
+
+			// Use the server-provided filename (correct extension), not a forced .csv.
+			const fallback = `${report.name}.csv`;
+			triggerBlobDownload(await res.blob(), report.fileName || fallback);
+			triggerToast(`Downloaded "${report.name}".`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to download report');
+		}
 	}
 
-	function retryReport(index: number) {
-		recentReports[index].status = 'Processing';
-		triggerToast(`Retrying "${recentReports[index].name}"...`);
+	// A failed report is retried by regenerating it with its original parameters.
+	async function retryReport(index: number) {
+		const report = recentReports[index];
+		try {
+			const res = await fetch(`${reportsBase}/generate`, {
+				method: 'POST',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: report.type,
+					course: report.course,
+					semester: report.semester,
+					date_from: report.dateFrom,
+					date_to: report.dateTo,
+					format: report.format
+				})
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				triggerToast('Failed to retry report');
+				return;
+			}
+
+			triggerToast(`Retried "${report.name}".`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to retry report');
+		}
 	}
 
-	function useTemplate(name: string) {
-		triggerToast(`Template "${name}" loaded into the generator.`);
+	function useTemplate(tpl: { name: string; type: string }) {
+		if (reportTypes.includes(tpl.type)) {
+			reportType = tpl.type;
+		}
+		triggerToast(`Template "${tpl.name}" loaded into the generator.`);
 	}
 
-	function scheduleNewReport() {
-		triggerToast('Opening report scheduler...');
+	// Schedules the report currently configured in the generate form on the
+	// selected cadence (scheduleFrequency).
+	async function scheduleNewReport() {
+		try {
+			const res = await fetch(`${reportsBase}/scheduled`, {
+				method: 'POST',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: `${reportType} Report`,
+					type: reportType,
+					frequency: scheduleFrequency,
+					format: reportFormat
+				})
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to schedule report');
+				return;
+			}
+
+			triggerToast(`Scheduled "${reportType} Report" (${scheduleFrequency}).`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to schedule report');
+		}
 	}
 
-	function runExport(name: string) {
-		triggerToast(`${name} started. Preparing download...`);
+	// Enables or disables a scheduled report. A disabled schedule stays in the
+	// list (so it can be re-enabled) but no longer runs.
+	async function toggleSchedule(sched: ScheduledReportItem) {
+		try {
+			const res = await fetch(`${reportsBase}/scheduled/${sched.id}`, {
+				method: 'PUT',
+				headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ enabled: !sched.enabled })
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to update schedule');
+				return;
+			}
+
+			triggerToast(`"${sched.name}" ${sched.enabled ? 'disabled' : 'enabled'}.`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to update schedule');
+		}
 	}
 
-	function reportTypeBadge(type: string): string {
-		switch (type) {
-			case 'PDF':
-				return 'bg-rose-50 text-rose-700 border-rose-100';
-			case 'Excel':
-				return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-			case 'CSV':
-				return 'bg-blue-50 text-blue-700 border-blue-100';
-			default:
-				return 'bg-purple-50 text-purple-700 border-purple-100';
+	// Permanently removes a scheduled report.
+	async function deleteSchedule(sched: ScheduledReportItem) {
+		try {
+			const res = await fetch(`${reportsBase}/scheduled/${sched.id}`, {
+				method: 'DELETE',
+				headers: authHeaders()
+			});
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				triggerToast(data.error ?? 'Failed to delete schedule');
+				return;
+			}
+
+			triggerToast(`Deleted schedule "${sched.name}".`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to delete schedule');
+		}
+	}
+
+	async function runExport(opt: { name: string; type: string }) {
+		try {
+			const res = await fetch(`${reportsBase}/export?type=${opt.type}`, { headers: authHeaders() });
+
+			if (await unauthorized(res)) return;
+
+			if (!res.ok) {
+				triggerToast('Failed to export data');
+				return;
+			}
+
+			triggerBlobDownload(await res.blob(), `${opt.type}_export.csv`);
+			triggerToast(`${opt.name} ready. Downloading…`);
+			await loadReportsData();
+		} catch {
+			triggerToast('Failed to export data');
 		}
 	}
 
@@ -839,17 +1260,6 @@
 				return 'bg-amber-500';
 			default:
 				return 'bg-rose-500';
-		}
-	}
-
-	function reportFormatClass(format: ReportFormat): string {
-		switch (format) {
-			case 'PDF':
-				return 'bg-rose-50 text-rose-700 border-rose-100';
-			case 'Excel':
-				return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-			case 'CSV':
-				return 'bg-blue-50 text-blue-700 border-blue-100';
 		}
 	}
 
@@ -1081,7 +1491,12 @@
 					<p
 						class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5"
 					>
-						Tuesday, 23 June 2026
+						{new Date().toLocaleDateString('en-US', {
+							weekday: 'long',
+							day: 'numeric',
+							month: 'long',
+							year: 'numeric'
+						})}
 					</p>
 				</div>
 			</div>
@@ -1240,7 +1655,9 @@
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 								Total Students
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+32 this semester</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Active Student Accounts</span
+							>
 						</div>
 					</div>
 
@@ -1270,9 +1687,11 @@
 						</div>
 						<div class="mt-4">
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-								Total Mentors
+								Total Admins
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+5 this month</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Active Administrator Accounts</span
+							>
 						</div>
 					</div>
 
@@ -1306,7 +1725,9 @@
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 								Total Activities
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+110 this week</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Total Campus Activities</span
+							>
 						</div>
 					</div>
 
@@ -1339,7 +1760,9 @@
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 								Active Tracks
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">2 new this year</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Categorized Activity Tracks</span
+							>
 						</div>
 					</div>
 				</section>
@@ -1355,7 +1778,11 @@
 						>
 							<h3 class="text-sm font-bold font-serif text-slate-905">User Management Overview</h3>
 							<button
-								onclick={() => (currentTab = 'User Management')}
+								onclick={() => {
+									currentTab = 'User Management';
+									userFilter = 'All';
+									userSearch = '';
+								}}
 								class="text-[#881B1B] hover:underline text-xs font-bold uppercase tracking-wider"
 							>
 								View All
@@ -1391,7 +1818,7 @@
 														? 'bg-slate-50 text-slate-650 border-slate-200'
 														: 'bg-blue-50 text-blue-700 border-blue-100'}"
 												>
-													{user.role === 'Admin' ? 'Mentor' : user.role}
+													{user.role}
 												</span>
 											</td>
 											<td class="py-4 px-5 text-slate-500 font-semibold">{user.dept}</td>
@@ -1443,14 +1870,17 @@
 								<div class="space-y-1">
 									<span class="font-extrabold text-xs block font-sans">Create User</span>
 									<span class="text-[9px] text-white/80 font-medium block font-sans leading-tight"
-										>Add student or mentor</span
+										>Add student or admin</span
 									>
 								</div>
 							</button>
 
 							<!-- Button 2: Create Activity -->
 							<button
-								onclick={() => (isCreateActivityModalOpen = true)}
+								onclick={() => {
+									currentTab = 'Activity Management';
+									isManageActivityModalOpen = true;
+								}}
 								class="p-5 bg-[#EFECE9] hover:bg-[#E4DFDB] text-slate-800 rounded-[20px] flex flex-col items-center justify-center text-center space-y-2.5 h-[160px] w-full transition duration-200 focus:outline-none"
 							>
 								<!-- Activity graph icon -->
@@ -1554,7 +1984,7 @@
 							<span
 								class="px-2 py-0.5 bg-rose-50 text-rose-705 font-extrabold text-[10px] uppercase rounded-md border border-rose-100"
 							>
-								+ 6 this week
+								Live Feed
 							</span>
 						</div>
 						<button
@@ -1619,7 +2049,7 @@
 					</div>
 				</section>
 			{:else if currentTab === 'Activity Management'}
-				<ActivityManagementView />
+				<ActivityManagementView bind:isActivityModalOpen={isManageActivityModalOpen} />
 			{:else if currentTab === 'Track Management'}
 				<TrackManagementView />
 			{:else if currentTab === 'Announcement Management'}
@@ -1658,16 +2088,18 @@
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 								Total Students
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+12 this semester</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Active Student Accounts</span
+							>
 						</div>
 					</div>
 
-					<!-- Card 2: Total Mentors -->
+					<!-- Card 2: Total Admins -->
 					<div
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
 					>
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">{totalMentorsCount}</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{totalAdminsCount}</span>
 							<div class="p-2.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
 								<!-- Users icon -->
 								<svg
@@ -1688,18 +2120,20 @@
 						</div>
 						<div class="mt-4">
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-								Total Mentors
+								Total Admins
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">+3 this month</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Active Administrator Accounts</span
+							>
 						</div>
 					</div>
 
-					<!-- Card 3: Total Admins -->
+					<!-- Card 3: Pending Verification -->
 					<div
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
 					>
 						<div class="flex items-center justify-between">
-							<span class="text-2xl font-bold font-serif text-slate-900">{totalAdminsCount}</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{pendingUsersCount}</span>
 							<div class="p-2.5 rounded-lg bg-red-50 text-red-655 border border-red-100">
 								<!-- Ribbon icon -->
 								<svg
@@ -1720,9 +2154,11 @@
 						</div>
 						<div class="mt-4">
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-								Total Admins
+								Pending Accounts
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">2 new this year</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>Awaiting Verification</span
+							>
 						</div>
 					</div>
 
@@ -1754,7 +2190,9 @@
 							<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 								Active Users
 							</h3>
-							<span class="text-[11px] font-bold text-slate-400 mt-1 block">94.7% active rate</span>
+							<span class="text-[11px] font-bold text-slate-400 mt-1 block"
+								>{activeRate}% active rate</span
+							>
 						</div>
 					</div>
 				</section>
@@ -1788,7 +2226,7 @@
 						>
 							<!-- Filter Tabs -->
 							<div class="flex flex-wrap gap-1.5">
-								{#each ['All', 'Student', 'Mentor', 'Admin'] as roleType}
+								{#each ['All', 'Student', 'Admin'] as roleType}
 									<button
 										type="button"
 										onclick={() => (userFilter = roleType)}
@@ -1801,9 +2239,7 @@
 											? 'All Users'
 											: roleType === 'Student'
 												? 'Students'
-												: roleType === 'Mentor'
-													? 'Mentors'
-													: 'Admins'}
+												: 'Admins'}
 									</button>
 								{/each}
 							</div>
@@ -1890,9 +2326,7 @@
 														class="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase rounded-full border
 														{user.displayRole === 'Student'
 															? 'bg-blue-50 text-blue-700 border-blue-100'
-															: user.displayRole === 'Mentor'
-																? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-																: 'bg-rose-50 text-rose-700 border-rose-100'}"
+															: 'bg-rose-50 text-rose-700 border-rose-100'}"
 													>
 														{user.displayRole}
 													</span>
@@ -1925,12 +2359,12 @@
 
 												<!-- Action Buttons -->
 												<td class="py-4 px-5">
-													<div class="flex items-center gap-3 text-slate-400">
+													<div class="flex items-center gap-3">
 														<button
 															type="button"
-															onclick={() => triggerToast(`Viewing stats for ${user.name}...`)}
+															onclick={() => openViewUser(user)}
 															aria-label="View user profile"
-															class="hover:text-[#881B1B] transition-colors p-0.5"
+															class="text-blue-500 hover:text-blue-700 transition-colors p-0.5"
 														>
 															<!-- Eye icon -->
 															<svg
@@ -1955,10 +2389,9 @@
 														</button>
 														<button
 															type="button"
-															onclick={() =>
-																triggerToast(`Edit functionality for ${user.name} is coming soon.`)}
+															onclick={() => openEditUser(user)}
 															aria-label="Edit user details"
-															class="hover:text-blue-600 transition-colors p-0.5"
+															class="text-amber-500 hover:text-amber-700 transition-colors p-0.5"
 														>
 															<!-- Pencil edit icon -->
 															<svg
@@ -1980,7 +2413,7 @@
 															type="button"
 															onclick={() => handleDeleteUser(user)}
 															aria-label="Delete user"
-															class="hover:text-red-650 transition-colors p-0.5"
+															class="text-rose-500 hover:text-rose-700 transition-colors p-0.5"
 														>
 															<!-- Trash delete icon -->
 															<svg
@@ -2177,7 +2610,9 @@
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
 						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900">156</span>
+							<span class="text-2xl font-bold font-serif text-slate-900"
+								>{reportSummary.total_reports}</span
+							>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Total Reports</h3>
 							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
 								Generated all-time
@@ -2207,7 +2642,7 @@
 					>
 						<div>
 							<span class="text-2xl font-bold font-serif text-slate-900"
-								>{scheduledReports.length + 8}</span
+								>{reportSummary.scheduled_reports}</span
 							>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">
 								Scheduled Reports
@@ -2239,10 +2674,12 @@
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
 						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900">84</span>
+							<span class="text-2xl font-bold font-serif text-slate-900"
+								>{reportSummary.monthly_downloads}</span
+							>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Downloads</h3>
 							<p class="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mt-0.5">
-								+18 this month
+								This month
 							</p>
 						</div>
 						<div class="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
@@ -2267,11 +2704,15 @@
 					<div
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
-						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900">Today</span>
+						<div class="min-w-0">
+							<span class="text-2xl font-bold font-serif text-slate-900"
+								>{recentReports.length ? recentReports[0].date : '—'}</span
+							>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Last Generated</h3>
-							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-								Jun 28, 2026
+							<p
+								class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 truncate"
+							>
+								{recentReports.length ? recentReports[0].name : 'No reports yet'}
 							</p>
 						</div>
 						<div class="p-2.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100">
@@ -2322,6 +2763,11 @@
 										<option value={type}>{type}</option>
 									{/each}
 								</select>
+								{#if !filterApplies(reportType, 'course') && !filterApplies(reportType, 'semester') && !filterApplies(reportType, 'date')}
+									<p class="text-[10px] text-slate-400 font-semibold">
+										This report is not scoped by course, semester or date range.
+									</p>
+								{/if}
 							</div>
 
 							<!-- Course / Semester -->
@@ -2335,7 +2781,8 @@
 									<select
 										id="report-course"
 										bind:value={reportCourse}
-										class="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-slate-355"
+										disabled={!filterApplies(reportType, 'course')}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-slate-355 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
 									>
 										{#each reportCourses as course}
 											<option value={course}>{course}</option>
@@ -2350,7 +2797,8 @@
 									<select
 										id="report-semester"
 										bind:value={reportSemester}
-										class="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-slate-355"
+										disabled={!filterApplies(reportType, 'semester')}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-slate-355 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
 									>
 										{#each reportSemesters as sem}
 											<option value={sem}>{sem}</option>
@@ -2370,7 +2818,8 @@
 										id="report-from"
 										type="date"
 										bind:value={reportFrom}
-										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+										disabled={!filterApplies(reportType, 'date')}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
 									/>
 								</div>
 								<div class="flex flex-col gap-1.5">
@@ -2382,28 +2831,20 @@
 										id="report-to"
 										type="date"
 										bind:value={reportTo}
-										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+										disabled={!filterApplies(reportType, 'date')}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
 									/>
 								</div>
 							</div>
 
-							<!-- Format -->
-							<div class="flex flex-col gap-2">
+							<!-- Format: reports are exported as CSV -->
+							<div class="flex flex-col gap-1.5">
 								<span class="text-[10px] font-extrabold text-slate-650 tracking-wider">FORMAT</span>
-								<div class="flex flex-wrap gap-2">
-									{#each reportFormats as fmt}
-										<button
-											type="button"
-											onclick={() => (reportFormat = fmt)}
-											class="px-4 py-2 rounded-lg text-xs font-bold border transition-all
-											{reportFormat === fmt
-												? 'bg-[#881B1B]/10 text-[#881B1B] border-[#881B1B]/30'
-												: 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}"
-										>
-											{fmt === 'Excel' ? 'Excel (.xlsx)' : fmt}
-										</button>
-									{/each}
-								</div>
+								<span
+									class="inline-flex w-fit items-center px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100"
+								>
+									CSV
+								</span>
 							</div>
 
 							<!-- Actions -->
@@ -2452,7 +2893,7 @@
 							{#each quickTemplates as tpl}
 								<button
 									type="button"
-									onclick={() => useTemplate(tpl.name)}
+									onclick={() => useTemplate(tpl)}
 									class="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left group"
 								>
 									<div
@@ -2528,7 +2969,6 @@
 									<th class="py-3.5 px-5">Report Name</th>
 									<th class="py-3.5 px-5">Generated By</th>
 									<th class="py-3.5 px-5">Date</th>
-									<th class="py-3.5 px-5">Format</th>
 									<th class="py-3.5 px-5">Status</th>
 									<th class="py-3.5 px-5 text-center">Actions</th>
 								</tr>
@@ -2541,15 +2981,6 @@
 										<td class="py-4 px-5 text-slate-500 font-semibold whitespace-nowrap"
 											>{report.date}</td
 										>
-										<td class="py-4 px-5">
-											<span
-												class="inline-flex px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border {reportFormatClass(
-													report.format
-												)}"
-											>
-												{report.format}
-											</span>
-										</td>
 										<td class="py-4 px-5">
 											<span
 												class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border {reportStatusClass(
@@ -2632,23 +3063,38 @@
 							class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/20 select-none"
 						>
 							<h3 class="text-sm font-bold font-serif text-slate-905">Scheduled Reports</h3>
-							<button
-								type="button"
-								onclick={scheduleNewReport}
-								class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C23A3A] hover:bg-[#B03131] text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors focus:outline-none"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-									stroke="currentColor"
-									class="w-3.5 h-3.5"
+							<div class="flex items-center gap-2">
+								<select
+									bind:value={scheduleFrequency}
+									aria-label="Schedule frequency"
+									class="px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 bg-white focus:outline-none focus:border-slate-355"
 								>
-									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-								</svg>
-								Schedule New
-							</button>
+									{#each scheduleFrequencies as freq}
+										<option value={freq}>{freq}</option>
+									{/each}
+								</select>
+								<button
+									type="button"
+									onclick={scheduleNewReport}
+									class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C23A3A] hover:bg-[#B03131] text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors focus:outline-none"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										stroke="currentColor"
+										class="w-3.5 h-3.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M12 4.5v15m7.5-7.5h-15"
+										/>
+									</svg>
+									Schedule New
+								</button>
+							</div>
 						</div>
 						<div class="p-3 space-y-1">
 							{#each scheduledReports as sched}
@@ -2656,7 +3102,9 @@
 									class="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors"
 								>
 									<div
-										class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0"
+										class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border {sched.enabled
+											? 'bg-amber-50 text-amber-600 border-amber-100'
+											: 'bg-slate-50 text-slate-400 border-slate-200'}"
 									>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
@@ -2680,13 +3128,89 @@
 											>{sched.freq}</span
 										>
 									</div>
-									<span
-										class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border bg-emerald-50 text-emerald-700 border-emerald-100 shrink-0"
-									>
-										<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-										Scheduled
-									</span>
+									{#if sched.enabled}
+										<span
+											class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border bg-emerald-50 text-emerald-700 border-emerald-100 shrink-0"
+										>
+											<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+											Scheduled
+										</span>
+									{:else}
+										<span
+											class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border bg-slate-100 text-slate-500 border-slate-200 shrink-0"
+										>
+											<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+											Disabled
+										</span>
+									{/if}
+									<div class="flex items-center gap-1 shrink-0">
+										<button
+											type="button"
+											onclick={() => toggleSchedule(sched)}
+											title={sched.enabled ? 'Disable schedule' : 'Enable schedule'}
+											aria-label={sched.enabled ? 'Disable schedule' : 'Enable schedule'}
+											class="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+										>
+											{#if sched.enabled}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="w-4 h-4"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M15.75 5.25v13.5m-7.5-13.5v13.5"
+													/>
+												</svg>
+											{:else}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="w-4 h-4"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 0 1 0 1.971l-11.54 6.347a1.125 1.125 0 0 1-1.667-.985V5.653Z"
+													/>
+												</svg>
+											{/if}
+										</button>
+										<button
+											type="button"
+											onclick={() => deleteSchedule(sched)}
+											title="Delete schedule"
+											aria-label="Delete schedule"
+											class="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors focus:outline-none"
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+												stroke="currentColor"
+												class="w-4 h-4"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+												/>
+											</svg>
+										</button>
+									</div>
 								</div>
+							{:else}
+								<p class="px-3 py-6 text-center text-[11px] text-slate-400 font-semibold">
+									No scheduled reports yet.
+								</p>
 							{/each}
 						</div>
 					</div>
@@ -2703,7 +3227,7 @@
 							{#each exportOptions as opt}
 								<button
 									type="button"
-									onclick={() => runExport(opt.name)}
+									onclick={() => runExport(opt)}
 									class="p-4 rounded-xl border border-slate-150 hover:border-[#881B1B]/30 hover:bg-slate-50/60 transition-colors text-left flex flex-col gap-2 group"
 								>
 									<div
@@ -2767,7 +3291,7 @@
 							<!-- Avg score by department (bar chart) -->
 							<div>
 								<span class="text-[10px] font-extrabold text-slate-405 uppercase tracking-wider"
-									>Avg Score by Department</span
+									>Avg Credits by Department</span
 								>
 								<div class="mt-3 flex gap-2">
 									<div
@@ -2787,8 +3311,8 @@
 													<div class="flex-1 flex items-end justify-center h-full">
 														<div
 															class="w-full max-w-[26px] rounded-t bg-gradient-to-t from-[#881B1B] to-[#C23A3A] transition-all"
-															style="height: {d.score}%"
-															title="{d.dept}: {d.score}"
+															style="height: {Math.min(d.score, 100)}%"
+															title="{d.dept}: {d.score} avg credits"
 														></div>
 													</div>
 												{/each}
@@ -2824,7 +3348,9 @@
 									<div
 										class="flex flex-col justify-between h-24 text-[9px] font-bold text-slate-300 text-right shrink-0"
 									>
-										<span>80</span><span>60</span><span>40</span><span>20</span>
+										{#each trendAxisLabels as lbl, lblIndex (lblIndex)}
+											<span>{lbl}</span>
+										{/each}
 									</div>
 									<div class="flex-1 min-w-0">
 										<div class="relative h-24">
@@ -2897,13 +3423,12 @@
 										class="border-b border-slate-150 bg-slate-50/50 text-[10px] font-extrabold text-slate-405 uppercase tracking-wider"
 									>
 										<th class="py-3 px-5">Action</th>
-										<th class="py-3 px-4">Type</th>
 										<th class="py-3 px-4">User</th>
 										<th class="py-3 px-5">Timestamp</th>
 									</tr>
 								</thead>
 								<tbody class="divide-y divide-slate-100 text-xs font-sans">
-									{#each reportAuditLog as entry (entry.action)}
+									{#each reportAuditLog as entry, entryIndex (entry.action + entryIndex)}
 										<tr class="hover:bg-slate-50/30 transition-colors">
 											<td class="py-3.5 px-5">
 												<div class="flex items-center gap-2.5">
@@ -2911,15 +3436,6 @@
 													></span>
 													<span class="font-bold text-slate-800">{entry.action}</span>
 												</div>
-											</td>
-											<td class="py-3.5 px-4">
-												<span
-													class="inline-flex px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border {reportTypeBadge(
-														entry.type
-													)}"
-												>
-													{entry.type}
-												</span>
 											</td>
 											<td class="py-3.5 px-4 text-slate-600 font-semibold whitespace-nowrap"
 												>{entry.user}</td
@@ -3287,23 +3803,42 @@
 			{#each toasts as toast (toast.id)}
 				<div
 					transition:slide={{ duration: 150 }}
-					class="p-4 bg-slate-800 border border-slate-700 text-white rounded-xl shadow-2xl flex items-center gap-2 text-xs font-semibold font-sans"
+					class="p-4 bg-slate-800 border border-slate-700 text-white rounded-xl shadow-2xl flex items-center justify-between gap-3 text-xs font-semibold font-sans min-w-[280px]"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-						stroke="currentColor"
-						class="w-4 h-4 text-emerald-400"
+					<div class="flex items-center gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4 text-emerald-400 shrink-0"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12Z"
+							/>
+						</svg>
+						<span>{toast.message}</span>
+					</div>
+					<button
+						type="button"
+						onclick={() => dismissToast(toast.id)}
+						class="text-slate-400 hover:text-white transition-colors focus:outline-none p-0.5 rounded-lg hover:bg-slate-700/50 shrink-0"
+						aria-label="Dismiss notification"
 					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12Z"
-						/>
-					</svg>
-					<span>{toast.message}</span>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2.5"
+							stroke="currentColor"
+							class="w-3.5 h-3.5"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+						</svg>
+					</button>
 				</div>
 			{/each}
 		</div>
@@ -3330,7 +3865,7 @@
 						<div>
 							<h3 class="text-sm font-bold font-serif text-slate-900">Create New User</h3>
 							<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-								Register Student or Mentor
+								Register Student or Admin
 							</p>
 						</div>
 						<button
@@ -3380,7 +3915,7 @@
 									class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
 								>
 									<option value="Student">Student</option>
-									<option value="Admin">Mentor</option>
+									<option value="Admin">Admin</option>
 								</select>
 							</div>
 
@@ -3410,7 +3945,7 @@
 									id="new-user-id"
 									type="text"
 									bind:value={newUserId}
-									placeholder={newUserRole === 'Student' ? 'e.g. IT2K24012' : 'e.g. mentor.cs'}
+									placeholder={newUserRole === 'Student' ? 'e.g. IT2K24012' : 'e.g. admin.cs'}
 									required
 									class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
 								/>
@@ -3475,6 +4010,275 @@
 							class="px-4 py-2 bg-[#881B1B] hover:bg-[#881B1B]/90 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							{creatingUser ? 'Creating…' : 'Create User'}
+						</button>
+					</div>
+				</form>
+			</div>
+		{/if}
+
+		<!-- View User Details Modal -->
+		{#if isViewUserModalOpen && viewingUser}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				onclick={(e) => {
+					if (e.target === e.currentTarget) isViewUserModalOpen = false;
+				}}
+				transition:fade={{ duration: 150 }}
+				class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+			>
+				<div
+					class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans"
+				>
+					<div
+						class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30"
+					>
+						<div>
+							<h3 class="text-sm font-bold font-serif text-slate-900">User Profile Details</h3>
+							<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+								ID: {viewingUser.id}
+							</p>
+						</div>
+						<button
+							type="button"
+							onclick={() => (isViewUserModalOpen = false)}
+							aria-label="Close modal"
+							class="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<div class="p-6 space-y-1">
+						<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+							<span class="text-xs font-semibold text-slate-500">Full Name</span>
+							<span class="text-xs font-bold text-slate-900">{viewingUser.name}</span>
+						</div>
+						<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+							<span class="text-xs font-semibold text-slate-500">Role</span>
+							<span class="text-xs font-bold text-slate-900"
+								>{viewingUser.displayRole || viewingUser.role}</span
+							>
+						</div>
+						{#if viewingUser.email}
+							<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+								<span class="text-xs font-semibold text-slate-500">Email Address</span>
+								<span class="text-xs font-bold text-slate-900 select-all">{viewingUser.email}</span>
+							</div>
+						{/if}
+						<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+							<span class="text-xs font-semibold text-slate-500">Department / Batch</span>
+							<span class="text-xs font-bold text-slate-900">{viewingUser.dept}</span>
+						</div>
+						{#if viewingUser.role === 'Student'}
+							<div class="flex items-center justify-between py-2.5 border-b border-slate-100">
+								<span class="text-xs font-semibold text-slate-500">Current Semester</span>
+								<span class="text-xs font-bold text-slate-900">{viewingUser.semester || 1}</span>
+							</div>
+						{/if}
+						<div class="flex items-center justify-between py-2.5">
+							<span class="text-xs font-semibold text-slate-500">Account Status</span>
+							<span
+								class="inline-flex items-center gap-1.5 font-bold {viewingUser.status === 'Active'
+									? 'text-emerald-600'
+									: 'text-slate-400'}"
+							>
+								<span
+									class="w-1.5 h-1.5 rounded-full shrink-0 {viewingUser.status === 'Active'
+										? 'bg-emerald-600'
+										: 'bg-slate-400'}"
+								></span>
+								{viewingUser.status}
+							</span>
+						</div>
+					</div>
+
+					<div
+						class="p-5 border-t border-slate-150 flex items-center justify-end gap-2.5 bg-slate-50/30"
+					>
+						<button
+							type="button"
+							onclick={() => (isViewUserModalOpen = false)}
+							class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
+						>
+							Close
+						</button>
+						<button
+							type="button"
+							onclick={() => {
+								if (viewingUser) {
+									isViewUserModalOpen = false;
+									openEditUser(viewingUser);
+								}
+							}}
+							class="px-4 py-2 bg-[#881B1B] hover:bg-[#881B1B]/90 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
+						>
+							Edit Profile
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Edit User Modal -->
+		{#if isEditUserModalOpen && editingUser}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				onclick={(e) => {
+					if (e.target === e.currentTarget) isEditUserModalOpen = false;
+				}}
+				transition:fade={{ duration: 150 }}
+				class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+			>
+				<form
+					onsubmit={handleSaveEditUser}
+					class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans"
+				>
+					<div
+						class="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50/30"
+					>
+						<div>
+							<h3 class="text-sm font-bold font-serif text-slate-900">Edit User Profile</h3>
+							<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+								ID: {editingUser.id}
+							</p>
+						</div>
+						<button
+							type="button"
+							onclick={() => (isEditUserModalOpen = false)}
+							aria-label="Close modal"
+							class="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-5 h-5"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<div class="p-6 space-y-4 font-sans">
+						<div class="flex flex-col gap-1.5">
+							<label
+								for="edit-name"
+								class="text-[10px] font-extrabold text-slate-650 tracking-wider">FULL NAME *</label
+							>
+							<input
+								id="edit-name"
+								type="text"
+								bind:value={editUserName}
+								required
+								class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+							/>
+						</div>
+
+						<div class="flex flex-col gap-1.5">
+							<label
+								for="edit-email"
+								class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+								>EMAIL ADDRESS *</label
+							>
+							<input
+								id="edit-email"
+								type="email"
+								bind:value={editUserEmail}
+								required
+								class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+							/>
+						</div>
+
+						<div class="flex flex-col gap-1.5">
+							<label
+								for="edit-dept"
+								class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+								>DEPARTMENT / BATCH *</label
+							>
+							<input
+								id="edit-dept"
+								type="text"
+								bind:value={editUserDept}
+								required
+								class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-355"
+							/>
+						</div>
+
+						{#if editingUser.role === 'Student'}
+							<div class="grid grid-cols-2 gap-4">
+								<div class="flex flex-col gap-1.5">
+									<label
+										for="edit-semester"
+										class="text-[10px] font-extrabold text-slate-650 tracking-wider"
+										>SEMESTER *</label
+									>
+									<select
+										id="edit-semester"
+										bind:value={editUserSemester}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
+									>
+										{#each Array.from({ length: 12 }, (_, i) => i + 1) as sem}
+											<option value={sem}>Semester {sem}</option>
+										{/each}
+									</select>
+								</div>
+
+								<div class="flex flex-col gap-1.5">
+									<label
+										for="edit-status"
+										class="text-[10px] font-extrabold text-slate-650 tracking-wider">STATUS</label
+									>
+									<select
+										id="edit-status"
+										bind:value={editUserStatus}
+										class="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-850 bg-white focus:outline-none focus:border-slate-355"
+									>
+										<option value="Active">Active</option>
+										<option value="Inactive">Inactive</option>
+										<option value="Pending">Pending</option>
+									</select>
+								</div>
+							</div>
+						{/if}
+
+						{#if editUserError}
+							<div
+								class="p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-lg border border-red-100"
+							>
+								{editUserError}
+							</div>
+						{/if}
+					</div>
+
+					<div
+						class="p-5 border-t border-slate-150 flex items-center justify-end gap-2.5 bg-slate-50/30"
+					>
+						<button
+							type="button"
+							onclick={() => (isEditUserModalOpen = false)}
+							class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							disabled={editingUserSubmit}
+							class="px-4 py-2 bg-[#881B1B] hover:bg-[#881B1B]/90 text-white font-bold text-xs uppercase rounded-lg transition-colors focus:outline-none disabled:opacity-50"
+						>
+							{editingUserSubmit ? 'Saving…' : 'Save Changes'}
 						</button>
 					</div>
 				</form>

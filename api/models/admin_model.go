@@ -13,6 +13,7 @@ type Admin struct {
 	Role               string         `gorm:"type:varchar(20);not null;default:'admin'" json:"role"`
 	AssignedBatch      string         `gorm:"type:varchar(100)" json:"assigned_batch"`   // to make an admin fetch only the students assigned to him.
 	MustChangePassword bool           `gorm:"default:false" json:"must_change_password"` // NEW
+	Status             string         `gorm:"type:varchar(20);default:'Active'" json:"status"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`

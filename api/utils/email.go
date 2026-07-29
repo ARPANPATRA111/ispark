@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -64,18 +65,33 @@ func SendOTP(toEmail, otpCode, purpose string) error {
 	subject := "Verification Code for iSpark"
 	body := fmt.Sprintf("Your OTP code for %s is: %s\nThis code expires in 15 minutes.", purpose, otpCode)
 
+	if err := deliver(toEmail, subject, body); err != nil {
+		log.Printf("OTP delivery to %s failed: %v", toEmail, err)
+		logEmailFallback(toEmail, subject, body)
+	}
+	// Always nil: the OTP is already stored, so a mail outage should not fail
+	// registration when the user can simply request a resend.
+	return nil
+}
+
+// deliver is the single transport used by every outgoing email, chosen in the
+// order that works in the most environments:
+//
+//  1. Brevo's HTTP API (BREVO_API_KEY) over HTTPS — port 443 is never blocked,
+//     which SMTP ports frequently are on PaaS hosts such as Render.
+//  2. SMTP (SMTP_HOST/USER/PASS), with an explicit dial timeout.
+//  3. Console logging, so local development needs no mail credentials at all.
+func deliver(toEmail, subject, body string) error {
 	sender := strings.TrimSpace(os.Getenv("SMTP_SENDER"))
 
 	if apiKey := strings.TrimSpace(os.Getenv("BREVO_API_KEY")); apiKey != "" {
 		if err := sendViaBrevoAPI(apiKey, sender, toEmail, subject, body); err != nil {
-			log.Printf("Brevo API send failed: %v", err)
-			logEmailFallback(toEmail, subject, body)
-			return nil
+			return err
 		}
 		// Accepted, not necessarily delivered: Brevo returns 201 and only then
 		// rejects asynchronously if SMTP_SENDER is not a verified sender. The
 		// sender is logged so that failure mode is obvious from the logs alone.
-		log.Printf("OTP email for %s accepted by Brevo (from %s). If it never arrives, confirm this sender is verified in Brevo.", toEmail, sender)
+		log.Printf("Email for %s accepted by Brevo (from %s). If it never arrives, confirm this sender is verified in Brevo.", toEmail, sender)
 		return nil
 	}
 
@@ -92,12 +108,10 @@ func SendOTP(toEmail, otpCode, purpose string) error {
 		smtpPort = "587"
 	}
 	if err := sendViaSMTP(smtpHost, smtpPort, smtpUser, smtpPass, sender, toEmail, subject, body); err != nil {
-		log.Printf("SMTP send failed (hosts often block outbound SMTP; set BREVO_API_KEY to send over HTTPS instead): %v", err)
-		logEmailFallback(toEmail, subject, body)
-		return nil
+		return fmt.Errorf("smtp send (hosts often block outbound SMTP; set BREVO_API_KEY to send over HTTPS instead): %w", err)
 	}
 
-	log.Printf("OTP email successfully sent to %s", toEmail)
+	log.Printf("Email successfully sent to %s", toEmail)
 	return nil
 }
 
@@ -212,4 +226,31 @@ func sendViaSMTP(host, port, user, pass, sender, toEmail, subject, body string) 
 		return err
 	}
 	return client.Quit()
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+// ValidateEmail checks if the email matches a realistic format.
+func ValidateEmail(email string) bool {
+	return emailRegex.MatchString(email)
+}
+
+// NormalizeEmail trims spaces and lowercases the email.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// SendEmail sends an arbitrary email with the given subject and plain-text body,
+// used for notices and reminders. Unlike SendOTP it returns the delivery error,
+// so callers can report failure rather than falsely reporting success.
+//
+// It shares deliver() with SendOTP so notices also go over HTTPS where possible;
+// sending them over raw SMTP would stall the request on hosts that block it.
+func SendEmail(toEmail, subject, body string) error {
+	if err := deliver(toEmail, subject, body); err != nil {
+		log.Printf("Email send to %s failed: %v", toEmail, err)
+		logEmailFallback(toEmail, subject, body)
+		return err
+	}
+	return nil
 }

@@ -1,15 +1,13 @@
 <script lang="ts">
-	import { slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { API_BASE_URL } from '$lib/config';
-	import { readJson, downloadAuthedFile, refreshOnFocus } from '$lib/api';
 
 	// ── Types ──────────────────────────────────────────────────────────────────
 	type CertStatus = 'Pending' | 'Approved' | 'Rejected';
 
 	interface Certificate {
 		id: string;
-		rawId: number; // numeric id used for the API calls
 		student: string;
 		regNo: string;
 		name: string;
@@ -22,81 +20,52 @@
 		remarks: string;
 	}
 
-	interface BackendCertificate {
-		id: number;
+	interface RawCert {
+		id: number | string;
+		student?: { name?: string };
 		student_roll_no: string;
-		student_name: string;
 		activity_name: string;
 		activity_category: string;
-		participation_type: string;
-		organizer_name: string;
-		event_level: string;
-		credits: number;
-		status: CertStatus;
-		description: string;
-		rejection_reason: string;
-		activity_date: string;
 		created_at: string;
+		status: CertStatus;
+		credits: number;
+		description?: string;
 	}
 
-	function adminToken(): string {
-		return localStorage.getItem('admin_token') ?? '';
-	}
-
-	function formatDate(iso: string): string {
-		if (!iso) return '—';
-		const d = new Date(iso);
-		return Number.isNaN(d.getTime())
-			? '—'
-			: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-	}
-
-	function mapCertificate(c: BackendCertificate): Certificate {
-		const highLevel = /national|international/i.test(c.event_level || '');
-		return {
-			id: `CERT-${c.id}`,
-			rawId: c.id,
-			student: c.student_name || c.student_roll_no,
-			regNo: c.student_roll_no,
-			name: c.activity_name,
-			type: c.activity_category || c.participation_type || '—',
-			submittedOn: formatDate(c.created_at),
-			status: c.status,
-			priority: c.status === 'Pending' && highLevel,
-			relatedActivity: c.organizer_name || '—',
-			creditsRequested: c.credits,
-			remarks: c.rejection_reason || c.description || '—'
-		};
-	}
-
-	// Loaded from the API in onMount below.
 	let certificates = $state<Certificate[]>([]);
-	let loading = $state(true);
-	let loadError = $state('');
 
-	async function loadCertificates() {
-		loading = true;
-		loadError = '';
+	onMount(async () => {
 		try {
+			const token = localStorage.getItem('admin_token');
+			if (!token) return;
 			const res = await fetch(`${API_BASE_URL}/api/admin/certificates`, {
-				headers: { Authorization: `Bearer ${adminToken()}` }
+				headers: { Authorization: `Bearer ${token}` }
 			});
-			const data = await readJson(res);
-			if (!res.ok) throw new Error(String(data.error || 'Failed to load certificates'));
-			certificates = ((data.certificates as BackendCertificate[]) ?? []).map(mapCertificate);
-			if (certificates.length > 0) selectedId = certificates[0].id;
-		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load certificates';
-		} finally {
-			loading = false;
+			if (res.ok) {
+				const data = await res.json();
+				if (data.certificates) {
+					certificates = data.certificates.map((c: RawCert) => ({
+						id: String(c.id),
+						student: c.student?.name || 'Unknown',
+						regNo: c.student_roll_no,
+						name: c.activity_name,
+						type: c.activity_category,
+						submittedOn: new Date(c.created_at).toLocaleDateString('en-GB', {
+							day: '2-digit',
+							month: 'short',
+							year: 'numeric'
+						}),
+						status: c.status,
+						priority: false,
+						relatedActivity: c.activity_name,
+						creditsRequested: c.credits,
+						remarks: c.description || ''
+					}));
+				}
+			}
+		} catch (e) {
+			console.error('Failed to load certificates', e);
 		}
-	}
-
-	onMount(() => {
-		loadCertificates();
-		// Pick up reviews made in another tab/by another admin without a manual
-		// reload, but only when this tab is actually being looked at.
-		return refreshOnFocus(loadCertificates);
 	});
 
 	// ── Derived Stats ──────────────────────────────────────────────────────────
@@ -156,127 +125,65 @@
 	const selectedCert = $derived(certificates.find((c) => c.id === selectedId) ?? certificates[0]);
 
 	// ── Actions ──────────────────────────────────────────────────────────────────
-	let acting = $state(false);
-
-	function setStatusLocally(cert: Certificate, status: CertStatus) {
-		certificates = certificates.map((c) => (c.id === cert.id ? { ...c, status } : c));
-	}
-
 	async function approveCert(cert: Certificate) {
-		if (acting) return;
-		acting = true;
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/approve`, {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.id}/approve`, {
 				method: 'POST',
-				headers: { Authorization: `Bearer ${adminToken()}` }
+				headers: { Authorization: `Bearer ${token}` }
 			});
-			const data = await readJson(res);
-			if (!res.ok) throw new Error(String(data.error || 'Approval failed'));
-			setStatusLocally(cert, 'Approved');
-			triggerToast(`Approved “${cert.name}” for ${cert.student}.`);
-		} catch (err) {
-			triggerToast(err instanceof Error ? err.message : 'Approval failed.', 'danger');
-		} finally {
-			acting = false;
+			if (res.ok) {
+				certificates = certificates.map((c) =>
+					c.id === cert.id ? { ...c, status: 'Approved' as CertStatus } : c
+				);
+				triggerToast(`Approved “${cert.name}” for ${cert.student}.`);
+			} else {
+				triggerToast('Failed to approve certificate', 'danger');
+			}
+		} catch {
+			triggerToast('Failed to approve certificate', 'danger');
 		}
 	}
 
 	async function rejectCert(cert: Certificate) {
-		if (acting) return;
-		const reason = window.prompt(
-			`Reason for rejecting “${cert.name}” (shown to the student so they can re-upload):`
-		);
-		if (reason === null) return; // cancelled
-		if (reason.trim() === '') {
-			triggerToast('A rejection reason is required.', 'danger');
-			return;
-		}
-		acting = true;
+		const reason = prompt('Reason for rejection:');
+		if (reason === null) return;
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/reject`, {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.id}/reject`, {
 				method: 'POST',
 				headers: {
-					Authorization: `Bearer ${adminToken()}`,
-					'Content-Type': 'application/json'
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`
 				},
-				body: JSON.stringify({ reason: reason.trim() })
+				body: JSON.stringify({ reason })
 			});
-			const data = await readJson(res);
-			if (!res.ok) throw new Error(String(data.error || 'Rejection failed'));
-			setStatusLocally(cert, 'Rejected');
-			triggerToast(`Rejected “${cert.name}” for ${cert.student}.`, 'danger');
-		} catch (err) {
-			triggerToast(err instanceof Error ? err.message : 'Rejection failed.', 'danger');
-		} finally {
-			acting = false;
+			if (res.ok) {
+				certificates = certificates.map((c) =>
+					c.id === cert.id ? { ...c, status: 'Rejected' as CertStatus } : c
+				);
+				triggerToast(`Rejected “${cert.name}” for ${cert.student}.`, 'danger');
+			} else {
+				triggerToast('Failed to reject certificate', 'danger');
+			}
+		} catch {
+			triggerToast('Failed to reject certificate', 'danger');
 		}
 	}
 
-	async function downloadCert(cert: Certificate) {
-		try {
-			await downloadAuthedFile(
-				`${API_BASE_URL}/api/admin/certificates/${cert.rawId}/file`,
-				adminToken(),
-				`${cert.name}.pdf`
-			);
-			triggerToast(`Downloaded “${cert.name}”.`);
-		} catch (err) {
-			triggerToast(err instanceof Error ? err.message : 'Download failed.', 'danger');
-		}
-	}
-
-	// ── Recent Verification Activity (static log) ────────────────────────────────
-	interface ActivityLog {
-		student: string;
-		regNo: string;
-		certificate: string;
-		date: string;
-		verifiedBy: string;
-		status: CertStatus;
-	}
-
-	const recentActivity: ActivityLog[] = [
-		{
-			student: 'Meera Krishnan',
-			regNo: 'EN23021',
-			certificate: 'Workshop on AI Ethics',
-			date: '24 Jun 2025',
-			verifiedBy: 'Dr. Rajesh Kumar',
-			status: 'Approved'
-		},
-		{
-			student: 'Karan Joshi',
-			regNo: 'EN22011',
-			certificate: 'Blood Donation Drive',
-			date: '22 Jun 2025',
-			verifiedBy: 'Dr. Rajesh Kumar',
-			status: 'Approved'
-		},
-		{
-			student: 'Pallavi Desai',
-			regNo: 'EN23016',
-			certificate: 'Dance Competition – 2nd Place',
-			date: '20 Jun 2025',
-			verifiedBy: 'Dr. Rajesh Kumar',
-			status: 'Rejected'
-		},
-		{
-			student: 'Sahil Rao',
-			regNo: 'EN22025',
-			certificate: 'Coding Bootcamp Certificate',
-			date: '18 Jun 2025',
-			verifiedBy: 'Dr. Rajesh Kumar',
-			status: 'Approved'
-		},
-		{
-			student: 'Tanvi Kulkarni',
-			regNo: 'EN23029',
-			certificate: 'Poster Presentation – Nat. Contest',
-			date: '16 Jun 2025',
-			verifiedBy: 'Dr. Rajesh Kumar',
-			status: 'Approved'
-		}
-	];
+	const recentActivity = $derived(
+		certificates
+			.filter((c) => c.status !== 'Pending')
+			.map((c) => ({
+				student: c.student,
+				regNo: c.regNo,
+				certificate: c.name,
+				date: c.submittedOn,
+				verifiedBy: 'Admin',
+				status: c.status
+			}))
+			.slice(0, 5)
+	);
 
 	// ── Toast ──────────────────────────────────────────────────────────────────
 	interface Toast {
@@ -296,6 +203,52 @@
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
+	let isFullCertModalOpen = $state(false);
+
+	function openFullCertModal(cert: Certificate) {
+		selectedId = cert.id;
+		isFullCertModalOpen = true;
+	}
+
+	function closeFullCertModal() {
+		isFullCertModalOpen = false;
+	}
+
+	async function downloadCertificate(cert: Certificate) {
+		try {
+			const token = localStorage.getItem('admin_token');
+			const res = await fetch(`${API_BASE_URL}/api/admin/certificates/${cert.id}/download`, {
+				headers: token ? { Authorization: `Bearer ${token}` } : {}
+			});
+
+			if (res.ok) {
+				const blob = await res.blob();
+				const contentDisposition = res.headers.get('content-disposition');
+				let filename = `Certificate_${cert.id}_${cert.regNo}`;
+				if (contentDisposition) {
+					const match = contentDisposition.match(/filename="?([^"]+)"?/);
+					if (match && match[1]) {
+						filename = match[1];
+					}
+				}
+				const url = URL.createObjectURL(blob);
+				const link = document.createElement('a');
+				link.href = url;
+				link.download = filename;
+				document.body.appendChild(link);
+				link.click();
+				link.remove();
+				URL.revokeObjectURL(url);
+				triggerToast(`Downloaded submitted certificate for ${cert.student}`);
+				return;
+			}
+			triggerToast('Certificate file is no longer available on server', 'danger');
+		} catch (e) {
+			console.error('Failed to download certificate file from backend', e);
+			triggerToast('Failed to download certificate file from server', 'danger');
+		}
+	}
+
 	function initials(name: string): string {
 		return name
 			.split(' ')
@@ -394,7 +347,7 @@
 </div>
 
 <!-- ── Stat Cards ──────────────────────────────────────────────────────────── -->
-<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 	<!-- Pending Verification -->
 	<div
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
@@ -402,6 +355,7 @@
 		<div class="flex items-center justify-between">
 			<span class="text-2xl font-bold font-serif text-slate-900">{pendingCount}</span>
 			<div class="p-2.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
+				<!-- Clipboard Check Icon -->
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
@@ -413,14 +367,14 @@
 					<path
 						stroke-linecap="round"
 						stroke-linejoin="round"
-						d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+						d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
 					/>
 				</svg>
 			</div>
 		</div>
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide">Pending Verification</h3>
-			<p class="text-[10px] font-bold text-amber-500 mt-1 uppercase tracking-wider">
+			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
 				Awaiting review
 			</p>
 		</div>
@@ -451,9 +405,7 @@
 		</div>
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide">Approved This Month</h3>
-			<p class="text-[10px] font-bold text-emerald-500 mt-1 uppercase tracking-wider">
-				+8 this week
-			</p>
+			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">+8 this week</p>
 		</div>
 	</div>
 
@@ -482,7 +434,7 @@
 		</div>
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide">Rejected Certificates</h3>
-			<p class="text-[10px] font-bold text-rose-500 mt-1 uppercase tracking-wider">
+			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
 				Requires resubmission
 			</p>
 		</div>
@@ -513,7 +465,7 @@
 		</div>
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide">Verification Rate</h3>
-			<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
 				Approval accuracy
 			</p>
 		</div>
@@ -600,22 +552,7 @@
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-slate-100 text-xs font-sans">
-				{#if loading}
-					<tr>
-						<td colspan="7" class="py-16 text-center text-slate-400 font-semibold text-xs">
-							Loading certificates…
-						</td>
-					</tr>
-				{:else if loadError}
-					<tr>
-						<td colspan="7" class="py-16 text-center text-red-500 font-semibold text-xs">
-							{loadError}
-							<button onclick={loadCertificates} class="ml-2 underline hover:text-red-700"
-								>Retry</button
-							>
-						</td>
-					</tr>
-				{:else if pagedCertificates.length === 0}
+				{#if pagedCertificates.length === 0}
 					<tr>
 						<td colspan="7" class="py-16 text-center text-slate-400 font-semibold text-xs">
 							No certificates match your filters.
@@ -840,8 +777,8 @@
 					<span class="text-[10px] font-semibold text-slate-400">{selectedCert.student}</span>
 				</div>
 				<button
-					onclick={() => downloadCert(selectedCert)}
-					class="w-full inline-flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+					onclick={() => openFullCertModal(selectedCert!)}
+					class="w-full inline-flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -978,8 +915,8 @@
 						Reject Certificate
 					</button>
 					<button
-						onclick={() => downloadCert(selectedCert)}
-						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+						onclick={() => downloadCertificate(selectedCert!)}
+						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -1057,3 +994,97 @@
 		</table>
 	</div>
 </section>
+
+<!-- ── Full Certificate Modal ───────────────────────────────────────────── -->
+{#if isFullCertModalOpen && selectedCert}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+		transition:fade={{ duration: 150 }}
+	>
+		<div
+			class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+			transition:slide={{ duration: 150 }}
+		>
+			<div class="flex items-center justify-between border-b border-slate-100 pb-4">
+				<div>
+					<span class="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
+						>Certificate Verification Record</span
+					>
+					<h3 class="text-base font-bold text-slate-900">{selectedCert.name}</h3>
+				</div>
+				<button
+					aria-label="Close"
+					onclick={closeFullCertModal}
+					class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-5 w-5"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
+					</svg>
+				</button>
+			</div>
+			<div class="mt-4 space-y-3 font-sans text-xs">
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Certificate ID</span>
+					<span class="font-extrabold text-slate-800">{selectedCert.id}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Student Name</span>
+					<span class="font-extrabold text-slate-800">{selectedCert.student}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Roll No</span>
+					<span class="font-bold text-slate-800">{selectedCert.regNo}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Certificate Type</span>
+					<span class="font-bold text-slate-800">{selectedCert.type}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Submitted Date</span>
+					<span class="font-bold text-slate-800">{selectedCert.submittedOn}</span>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Credits Requested</span>
+					<span class="font-extrabold text-emerald-700"
+						>{selectedCert.creditsRequested} Credits</span
+					>
+				</div>
+				<div class="flex justify-between rounded-lg bg-slate-50 p-3">
+					<span class="font-bold text-slate-500">Verification Status</span>
+					<span class="font-bold text-slate-800">{selectedCert.status}</span>
+				</div>
+				{#if selectedCert.remarks}
+					<div class="rounded-lg bg-slate-50 p-3">
+						<span class="font-bold text-slate-500 block mb-1">Remarks / Description</span>
+						<p class="font-medium text-slate-700">{selectedCert.remarks}</p>
+					</div>
+				{/if}
+			</div>
+			<div class="mt-6 flex justify-end gap-2">
+				<button
+					onclick={() => downloadCertificate(selectedCert!)}
+					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+				>
+					Download Record
+				</button>
+				<button
+					onclick={closeFullCertModal}
+					class="rounded-lg bg-[#881B1B] px-4 py-2 text-xs font-bold text-white hover:bg-[#881B1B]/90 cursor-pointer"
+				>
+					Close
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

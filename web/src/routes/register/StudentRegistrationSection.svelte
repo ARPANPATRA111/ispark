@@ -577,24 +577,17 @@
 									required
 								>
 									<option value="" disabled class="text-slate-450">Select Course</option>
-									<option value="MBA (Management Science - MS)"
-										>MBA (Management Science - MS)</option
+									<option value="MBA(MS) 5yrs Integrated">MBA(MS) 5yrs Integrated</option>
+									<option value="MCA 5yrs Integrated">MCA 5yrs Integrated</option>
+									<option value="MTech(CS) 5yrs Integrated">MTech(CS) 5yrs Integrated</option>
+									<option value="MTech(IT) 5yrs Integrated">MTech(IT) 5yrs Integrated</option>
+									<option value="B.Com (Hons) UG">B.Com (Hons) UG</option>
+									<option value="MBA(MS) 2yrs PG">MBA(MS) 2yrs PG</option>
+									<option value="MBA(APR) 2yrs PG">MBA(APR) 2yrs PG</option>
+									<option value="MBA(Entrepreneurship) 2yrs PG"
+										>MBA(Entrepreneurship) 2yrs PG</option
 									>
-									<option value="MCA (Master of Computer Applications)"
-										>MCA (Master of Computer Applications)</option
-									>
-									<option value="M.Tech (Information Technology - IT)"
-										>M.Tech (Information Technology - IT)</option
-									>
-									<option value="M.Tech (Computer Science - CS)"
-										>M.Tech (Computer Science - CS)</option
-									>
-									<option value="MBA (Management Science)">MBA (Management Science)</option>
-									<option value="MBA (Advertising and Public Relations - APR)"
-										>MBA (Advertising and Public Relations - APR)</option
-									>
-									<option value="MBA (Entrepreneurship)">MBA (Entrepreneurship)</option>
-									<option value="B.Com. (Hons.)">B.Com. (Hons.)</option>
+									<option value="MBA(T) 2yrs PG">MBA(T) 2yrs PG</option>
 								</select>
 								<div
 									class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400"
