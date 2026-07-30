@@ -18,7 +18,6 @@
 		regNo: string;
 		type: string;
 		date: string;
-		priority: string;
 		file: string;
 		credits: number;
 		name: string;
@@ -64,8 +63,24 @@
 		active_students: 0,
 		pending_reviews: 0,
 		average_credits: 0,
-		verification_rate: 0
+		verification_rate: 0,
+		target_credits: 200,
+		students_completed: 0,
+		students_on_track: 0,
+		students_critical: 0
 	});
+
+	// Cohort progress against the configured graduation target. The panel below
+	// used to print a fixed 142.5 / 71.2% / 8 / 12 / 4 for every admin and batch.
+	const cohortPercent = $derived(
+		stats.target_credits > 0
+			? Math.min(Math.round((stats.average_credits / stats.target_credits) * 1000) / 10, 100)
+			: 0
+	);
+	const halfTarget = $derived(Math.round(stats.target_credits / 2));
+	const creditAxisLabels = $derived(
+		[0, 0.25, 0.5, 0.75, 1].map((fraction) => Math.round(stats.target_credits * fraction))
+	);
 
 	// Certificate data, loaded from the API.
 	let pendingCertificates = $state<PendingCertificate[]>([]);
@@ -83,7 +98,9 @@
 			// 1. Fetch Stats
 			const statsRes = await fetch(`${API_BASE_URL}/api/admin/dashboard/stats`, { headers });
 			if (statsRes.ok) {
-				stats = await statsRes.json();
+				// Merged rather than replaced so a field the API stops sending falls
+				// back to a neutral zero instead of rendering "undefined".
+				stats = { ...stats, ...(await statsRes.json()) };
 			}
 
 			// 2. Fetch Recent Activities
@@ -124,7 +141,6 @@
 							month: 'short',
 							year: 'numeric'
 						}),
-						priority: 'Normal', // Static for now
 						file: c.proof_url || 'view_certificate',
 						credits: c.credits,
 						name: c.activity_name
@@ -335,7 +351,7 @@
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide font-sans">Total Students</h3>
 			<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-				+2 this semester
+				In your assigned scope
 			</p>
 		</div>
 	</div>
@@ -369,9 +385,7 @@
 				Pending Certificate Reviews
 			</h3>
 			<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-				{pendingCertificates.length > 0
-					? `${pendingCertificates.filter((c) => c.priority === 'High').length} marked urgent`
-					: 'All caught up!'}
+				{pendingCertificates.length > 0 ? 'Awaiting your review' : 'All caught up!'}
 			</p>
 		</div>
 	</div>
@@ -403,7 +417,7 @@
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide font-sans">Active Students</h3>
 			<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-				+12 this week
+				Enrolled or submitting
 			</p>
 		</div>
 	</div>
@@ -437,7 +451,7 @@
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide font-sans">Average Credits</h3>
 			<p class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
-				+4.2% from last batch
+				Out of {stats.target_credits} required
 			</p>
 		</div>
 	</div>
@@ -487,6 +501,15 @@
 								>
 									{act.status}
 								</span>
+							</td>
+						</tr>
+					{:else}
+						<tr>
+							<td colspan="5" class="py-10 px-5 text-center">
+								<p class="text-xs font-bold text-slate-600">No submissions yet</p>
+								<p class="text-[11px] text-slate-400 mt-1">
+									Submissions from students in your scope will appear here.
+								</p>
 							</td>
 						</tr>
 					{/each}
@@ -628,31 +651,35 @@
 		<div class="md:col-span-7 space-y-4">
 			<div class="flex items-center justify-between">
 				<div class="flex items-baseline gap-2">
-					<span class="text-3xl font-extrabold text-inst-navy leading-none">142.5</span>
+					<span class="text-3xl font-extrabold text-inst-navy leading-none"
+						>{(stats.average_credits ?? 0).toFixed(1)}</span
+					>
 					<span class="text-[10px] font-bold text-slate-405 uppercase tracking-widest"
 						>Average Credits Earned</span
 					>
 					<span class="text-slate-300 font-light">/</span>
-					<span class="text-sm font-bold text-slate-500">200</span>
+					<span class="text-sm font-bold text-slate-500">{stats.target_credits}</span>
 				</div>
 				<span
 					class="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded border border-emerald-100"
 				>
-					71.2% Average Progress
+					{cohortPercent}% Average Progress
 				</span>
 			</div>
 
 			<div class="space-y-1.5">
 				<!-- Custom Progress Bar -->
 				<div class="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
-					<div class="h-full bg-accent-red rounded-full" style="width: 71.2%"></div>
+					<div class="h-full bg-accent-red rounded-full" style="width: {cohortPercent}%"></div>
 				</div>
 				<div class="flex justify-between text-[9px] font-bold text-slate-400 px-1 font-sans">
-					<span>0 Credits</span>
-					<span>50</span>
-					<span>100</span>
-					<span>150</span>
-					<span>200 (Target)</span>
+					{#each creditAxisLabels as label, index (index)}
+						<span>
+							{label}{index === 0 ? ' Credits' : ''}{index === creditAxisLabels.length - 1
+								? ' (Target)'
+								: ''}
+						</span>
+					{/each}
 				</div>
 			</div>
 		</div>
@@ -665,25 +692,31 @@
 		<!-- Status Breakdown -->
 		<div class="md:col-span-4 grid grid-cols-3 gap-2 text-center">
 			<div class="p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100/50">
-				<div class="text-lg font-extrabold text-emerald-700">8</div>
+				<div class="text-lg font-extrabold text-emerald-700">{stats.students_completed}</div>
 				<div class="text-[9px] font-bold text-slate-500 uppercase tracking-wide mt-0.5">
 					Completed
 				</div>
-				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">>200 Credits</div>
+				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">
+					{stats.target_credits}+ Credits
+				</div>
 			</div>
 			<div class="p-2.5 rounded-lg bg-blue-50/50 border border-blue-100/50">
-				<div class="text-lg font-extrabold text-blue-700">12</div>
+				<div class="text-lg font-extrabold text-blue-700">{stats.students_on_track}</div>
 				<div class="text-[9px] font-bold text-slate-500 uppercase tracking-wide mt-0.5">
 					On Track
 				</div>
-				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">100-200 Credits</div>
+				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">
+					{halfTarget}-{stats.target_credits} Credits
+				</div>
 			</div>
 			<div class="p-2.5 rounded-lg bg-rose-50/50 border border-rose-100/50">
-				<div class="text-lg font-extrabold text-rose-700">4</div>
+				<div class="text-lg font-extrabold text-rose-700">{stats.students_critical}</div>
 				<div class="text-[9px] font-bold text-slate-500 uppercase tracking-wide mt-0.5">
 					Critical
 				</div>
-				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">&lt;100 Credits</div>
+				<div class="text-[8px] font-semibold text-slate-400 mt-0.5">
+					&lt;{halfTarget} Credits
+				</div>
 			</div>
 		</div>
 	</div>
@@ -742,7 +775,7 @@
 						<th class="py-3 px-5">Reg. No.</th>
 						<th class="py-3 px-5">Certificate Type</th>
 						<th class="py-3 px-5">Submitted On</th>
-						<th class="py-3 px-5">Priority</th>
+						<th class="py-3 px-5">Credits</th>
 						<th class="py-3 px-5 text-center">Actions</th>
 					</tr>
 				</thead>
@@ -756,14 +789,8 @@
 							<td class="py-3.5 px-5 text-slate-500 font-medium">{cert.date}</td>
 							<td class="py-3.5 px-5">
 								<span class="inline-flex items-center gap-1.5 font-bold">
-									<span
-										class="w-2 h-2 rounded-full {cert.priority === 'High'
-											? 'bg-rose-600'
-											: 'bg-slate-400'}"
-									></span>
-									<span class={cert.priority === 'High' ? 'text-rose-700' : 'text-slate-500'}>
-										{cert.priority}
-									</span>
+									<span class="w-2 h-2 rounded-full bg-slate-400"></span>
+									<span class="text-slate-500">{cert.credits} cr</span>
 								</span>
 							</td>
 							<td class="py-3.5 px-5">
@@ -928,7 +955,7 @@
 						<div class="flex-grow min-w-0">
 							<div class="text-xs font-bold text-slate-800 truncate">{activeCertificate.file}</div>
 							<div class="text-[10px] font-semibold text-slate-400 mt-0.5">
-								PDF Document &middot; 1.4 MB
+								Submitted document &middot; {activeCertificate.credits} credits requested
 							</div>
 						</div>
 						<button

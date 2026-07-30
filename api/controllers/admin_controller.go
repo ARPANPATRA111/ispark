@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/iips-oss/ispark/api/config"
@@ -168,7 +169,7 @@ func GetAllStudents(c *fiber.Ctx) error {
 	studentQuery, scoped := scopeToAssignedBatch(studentQuery, currentUser)
 
 	if !scoped {
-		return c.JSON(fiber.Map{"students": []models.Student{}})
+		return c.JSON(fiber.Map{"students": []models.Student{}, "target_credits": targetCreditsSetting()})
 	}
 
 	if err := studentQuery.Find(&students).Error; err != nil {
@@ -222,7 +223,10 @@ func GetAllStudents(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"students": students})
+	// The credit target is a platform setting, not a constant the admin views may
+	// assume. Sending it with the roster keeps every progress bar honest when the
+	// super admin changes the policy.
+	return c.JSON(fiber.Map{"students": students, "target_credits": targetCreditsSetting()})
 }
 
 // 3. GET /api/admin/students/:roll -> One student's detail
@@ -250,7 +254,28 @@ func GetStudentDetail(c *fiber.Ctx) error {
 	}
 	applyStudentStats(&student)
 
-	return c.JSON(fiber.Map{"student": student})
+	// Most recent thing this student actually did — the latest of an enrolment and
+	// a certificate submission. The detail view printed a fixed "24 Jun 2025" here
+	// for everyone; nil means "no activity yet" and the view says so.
+	var lastActivity *time.Time
+	for _, enrollment := range student.Enrollments {
+		if lastActivity == nil || enrollment.CreatedAt.After(*lastActivity) {
+			at := enrollment.CreatedAt
+			lastActivity = &at
+		}
+	}
+	for _, cert := range student.Certificates {
+		if lastActivity == nil || cert.CreatedAt.After(*lastActivity) {
+			at := cert.CreatedAt
+			lastActivity = &at
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"student":          student,
+		"target_credits":   targetCreditsSetting(),
+		"last_activity_at": lastActivity,
+	})
 }
 
 // Fetches student if they exist AND are within admin's batch scope
@@ -384,13 +409,20 @@ func GetAdminDashboardStats(c *fiber.Ctx) error {
 		batchPrefix = admin.AssignedBatch
 	}
 
+	targetCredits := targetCreditsSetting()
+
 	// If admin has no assigned batch, return 0s
 	if admin.Role == "admin" && batchPrefix == "" {
 		return c.JSON(fiber.Map{
-			"total_students":  0,
-			"active_students": 0,
-			"pending_reviews": 0,
-			"average_credits": 0,
+			"total_students":     0,
+			"active_students":    0,
+			"pending_reviews":    0,
+			"average_credits":    0,
+			"verification_rate":  0,
+			"target_credits":     targetCredits,
+			"students_completed": 0,
+			"students_on_track":  0,
+			"students_critical":  0,
 		})
 	}
 
@@ -435,11 +467,69 @@ func GetAdminDashboardStats(c *fiber.Ctx) error {
 		avgCredits = float64(totalCredits) / float64(totalStudents)
 	}
 
+	// Share of reviewed certificates that were approved. Submissions still in the
+	// queue are excluded: they have not been verified either way yet.
+	var reviewedCounts struct {
+		Approved int64
+		Rejected int64
+	}
+	// CASE rather than COUNT(...) FILTER: the suite runs these controllers
+	// against SQLite, so the aggregate has to be portable.
+	reviewedQuery := config.DB.Model(&models.Certificate{}).Select(
+		"COALESCE(SUM(CASE WHEN certificates.status = 'Approved' THEN 1 ELSE 0 END), 0) AS approved, " +
+			"COALESCE(SUM(CASE WHEN certificates.status = 'Rejected' THEN 1 ELSE 0 END), 0) AS rejected",
+	)
+	if batchPrefix != "" {
+		reviewedQuery = reviewedQuery.Joins("JOIN students on students.roll_no = certificates.student_roll_no").Where("students.roll_no LIKE ?", batchPrefix+"%")
+	}
+	reviewedQuery.Scan(&reviewedCounts)
+
+	verificationRate := 0.0
+	if reviewed := reviewedCounts.Approved + reviewedCounts.Rejected; reviewed > 0 {
+		verificationRate = float64(reviewedCounts.Approved) / float64(reviewed) * 100
+	}
+
+	// Progress breakdown of the cohort. The dashboard used to render a fixed
+	// 8 / 12 / 4 split here, so it reported the same three numbers to every admin
+	// on every batch. Students with no approved certificate at all still have to
+	// be counted, which is why this walks the student table rather than grouping
+	// the certificates.
+	var creditRows []struct {
+		Credits int
+	}
+	creditRowsQuery := config.DB.Model(&models.Student{}).Select(
+		"(SELECT COALESCE(SUM(credits), 0) FROM certificates " +
+			"WHERE certificates.student_roll_no = students.roll_no " +
+			"AND certificates.status = 'Approved' AND certificates.deleted_at IS NULL) AS credits",
+	)
+	if batchPrefix != "" {
+		creditRowsQuery = creditRowsQuery.Where("roll_no LIKE ?", batchPrefix+"%")
+	}
+	creditRowsQuery.Scan(&creditRows)
+
+	completed, onTrack, critical := 0, 0, 0
+	halfway := targetCredits / 2
+	for _, row := range creditRows {
+		switch {
+		case row.Credits >= targetCredits:
+			completed++
+		case row.Credits >= halfway:
+			onTrack++
+		default:
+			critical++
+		}
+	}
+
 	return c.JSON(fiber.Map{
-		"total_students":  totalStudents,
-		"active_students": activeStudents,
-		"pending_reviews": pendingReviews,
-		"average_credits": avgCredits,
+		"total_students":     totalStudents,
+		"active_students":    activeStudents,
+		"pending_reviews":    pendingReviews,
+		"average_credits":    avgCredits,
+		"verification_rate":  verificationRate,
+		"target_credits":     targetCredits,
+		"students_completed": completed,
+		"students_on_track":  onTrack,
+		"students_critical":  critical,
 	})
 }
 

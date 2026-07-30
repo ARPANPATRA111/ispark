@@ -21,14 +21,16 @@
 		course: '',
 		program: 'Professional Studies',
 		semester: '',
-		batch: '2021 - 2026',
+		batch: '—',
 		department: 'IIPS DAVV',
 		institute: 'IIPS, DAVV',
-		status: 'Active Student',
+		status: '—',
 		verified: true,
 		photoUrl: '', // Empty for now, missing photo
 		emailVerified: false, // set from the account's real verification flag
-		lastLogin: 'Today',
+		// Filled from the account's real last_login_at; this used to read "Today"
+		// unconditionally, on every visit, for every account.
+		lastLogin: '—',
 		lastPasswordChange: '-'
 	});
 
@@ -42,6 +44,22 @@
 			.join('')
 			.toUpperCase() || 'S'
 	);
+
+	// "Today" / "Yesterday" for a recent sign-in, an absolute date beyond that, and
+	// an em dash when the account has not signed in since the column was added.
+	function formatLastLogin(value: string | null | undefined): string {
+		if (!value) return '—';
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return '—';
+
+		const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+		const dayGap = Math.round((startOfDay(new Date()) - startOfDay(parsed)) / 86_400_000);
+		if (dayGap === 0) {
+			return `Today, ${parsed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+		}
+		if (dayGap === 1) return 'Yesterday';
+		return parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+	}
 
 	async function loadProfile() {
 		try {
@@ -65,6 +83,8 @@
 				profile.semester = `Semester ${s.semester}`;
 				profile.verified = s.is_verified;
 				profile.emailVerified = s.is_verified;
+				profile.status = s.status === 'Active' ? 'Active Student' : (s.status ?? '—');
+				profile.lastLogin = formatLastLogin(s.last_login_at);
 			}
 		} catch (err) {
 			console.error(err);
@@ -665,8 +685,16 @@
 						>Current Status</span
 					>
 					<div class="flex items-center gap-1.5 mt-1.5">
-						<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-						<span class="font-bold text-emerald-600">{profile.status}</span>
+						<span
+							class="w-2 h-2 rounded-full {profile.status === 'Active Student'
+								? 'bg-emerald-500'
+								: 'bg-slate-400'}"
+						></span>
+						<span
+							class="font-bold {profile.status === 'Active Student'
+								? 'text-emerald-600'
+								: 'text-slate-600'}">{profile.status}</span
+						>
 					</div>
 				</div>
 			</div>

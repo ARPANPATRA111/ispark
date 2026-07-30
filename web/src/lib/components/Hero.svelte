@@ -4,7 +4,7 @@
 		badgeText = 'Departmental Affiliated Cell',
 		titleText = 'Skill, Personality Advancement & Refinement Cell',
 		subtitleText = '',
-		descriptionText = 'Welcome to ISPARC, an official cell of the Institute of Infrastructure and Professional Studies (IIPS), DAVV. We facilitate structured extracurricular activities, personality enhancement tracks, and grading systems to foster student growth and leadership.',
+		descriptionText = 'Welcome to ISPARC, an official cell of the International Institute of Professional Studies (IIPS), DAVV. We facilitate structured extracurricular activities, personality enhancement tracks, and grading systems to foster student growth and leadership.',
 		primaryCtaText = 'Grading Matrix',
 		primaryCtaHref = '#grading-scheme',
 		secondaryCtaText = 'Explore Tracks',

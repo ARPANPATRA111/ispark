@@ -433,6 +433,19 @@
 
 	let currentSettings = $derived(settingsSections[activeSettingsTab] ?? []);
 
+	// Every figure on the settings overview and the Platform Summary panel was a
+	// literal: the academic year was the string "2025-26", the activity-rule and
+	// notification-template counts were 12 and 5, and the credit-policy count was
+	// the real number of rows plus an arbitrary 3. They all count real settings now.
+	const settingsCount = (tab: string) => (settingsSections[tab] ?? []).length;
+	const academicYear = $derived(
+		(settingsSections['Academic Year'] ?? []).find((s) => s.key === 'academic_year_current')
+			?.value ?? '—'
+	);
+	const creditPolicyCount = $derived(settingsCount('Credit Policy'));
+	const activityRuleCount = $derived(settingsCount('Activity Rules'));
+	const notificationTemplateCount = $derived(settingsCount('Notifications'));
+
 	// Edit setting modal state
 	let isEditSettingOpen = $state(false);
 	let editSettingIndex = $state(-1);
@@ -3314,7 +3327,7 @@
 						<div class="p-5 border-b border-slate-100 bg-slate-50/20 select-none">
 							<h3 class="text-sm font-bold font-serif text-slate-905">Institutional Overview</h3>
 							<p class="text-[11px] text-slate-500 font-semibold mt-0.5">
-								Academic year 2025–26 at a glance
+								Academic year {academicYear} at a glance
 							</p>
 						</div>
 						<div class="p-5 space-y-6">
@@ -3508,7 +3521,7 @@
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
 						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900">2025–26</span>
+							<span class="text-2xl font-bold font-serif text-slate-900">{academicYear}</span>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Academic Year</h3>
 							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
 								Current cycle
@@ -3537,9 +3550,7 @@
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
 						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900"
-								>{(settingsSections['Credit Policy']?.length ?? 0) + 3}</span
-							>
+							<span class="text-2xl font-bold font-serif text-slate-900">{creditPolicyCount}</span>
 							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Credit Policies</h3>
 							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
 								Rules active
@@ -3563,15 +3574,13 @@
 						</div>
 					</div>
 
-					<!-- Required Activities -->
+					<!-- Activity Rules -->
 					<div
 						class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow"
 					>
 						<div>
-							<span class="text-2xl font-bold font-serif text-slate-900">12</span>
-							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">
-								Required Activities
-							</h3>
+							<span class="text-2xl font-bold font-serif text-slate-900">{activityRuleCount}</span>
+							<h3 class="text-xs font-bold text-slate-800 tracking-wide mt-1.5">Activity Rules</h3>
 							<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
 								Configured
 							</p>
@@ -3765,27 +3774,25 @@
 								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
 							>
 								<span class="text-xs font-semibold text-slate-500">Academic Year</span>
-								<span class="text-xs font-bold text-slate-900">2025–26</span>
+								<span class="text-xs font-bold text-slate-900">{academicYear}</span>
 							</div>
 							<div
 								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
 							>
 								<span class="text-xs font-semibold text-slate-500">Credit Policies</span>
-								<span class="text-xs font-bold text-slate-900"
-									>{(settingsSections['Credit Policy']?.length ?? 0) + 3}</span
-								>
+								<span class="text-xs font-bold text-slate-900">{creditPolicyCount}</span>
 							</div>
 							<div
 								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
 							>
 								<span class="text-xs font-semibold text-slate-500">Activity Rules</span>
-								<span class="text-xs font-bold text-slate-900">12</span>
+								<span class="text-xs font-bold text-slate-900">{activityRuleCount}</span>
 							</div>
 							<div
 								class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
 							>
 								<span class="text-xs font-semibold text-slate-500">Notif. Templates</span>
-								<span class="text-xs font-bold text-slate-900">5</span>
+								<span class="text-xs font-bold text-slate-900">{notificationTemplateCount}</span>
 							</div>
 							<div class="flex items-center justify-between py-2.5">
 								<span class="text-xs font-semibold text-slate-500">System Status</span>
@@ -3794,7 +3801,7 @@
 
 							<button
 								type="button"
-								onclick={() => triggerToast('Opening global settings editor...')}
+								onclick={() => (currentTab = 'System Settings')}
 								class="w-full mt-3 py-2.5 bg-[#C23A3A] hover:bg-[#B03131] text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors focus:outline-none"
 							>
 								Edit Global Settings

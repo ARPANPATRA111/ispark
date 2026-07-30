@@ -141,6 +141,7 @@
 			});
 			if (marksheetRes.ok) {
 				const data = await marksheetRes.json();
+				if (data.target_credits) targetCredits = data.target_credits;
 				creditCategorySummaries = (data.credit_categories || []).map((cat: APICreditCategory) => {
 					const pct = parseInt(cat.contribution) || 0;
 					return {
@@ -170,11 +171,14 @@
 		loadEnrollmentsData();
 	});
 
+	// Graduation requirement from the marksheet endpoint; this was a literal 200.
+	let targetCredits = $state(200);
+
 	let totalCreditsEarned = $derived(
 		creditCategorySummaries.reduce((sum, cat) => sum + cat.creditsEarned, 0)
 	);
 	let totalCreditsPercentage = $derived(
-		Math.min(Math.round((totalCreditsEarned / 200) * 100), 100)
+		targetCredits > 0 ? Math.min(Math.round((totalCreditsEarned / targetCredits) * 100), 100) : 0
 	);
 
 	const recentUpdates: RecentUpdate[] = $derived.by(() => {

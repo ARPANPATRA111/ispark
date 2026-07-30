@@ -57,6 +57,7 @@
 		cohortSize,
 		activities = [],
 		certificates = [],
+		lastActivityAt = null,
 		onBack,
 		onToast
 	}: {
@@ -65,6 +66,7 @@
 		cohortSize: number;
 		activities?: Activity[];
 		certificates?: Certificate[];
+		lastActivityAt?: string | null;
 		onBack: () => void;
 		onToast?: (message: string, type?: 'success' | 'danger') => void;
 	} = $props();
@@ -78,7 +80,30 @@
 		Math.min(100, Math.round((student.creditsEarned / student.creditsTarget) * 100))
 	);
 	const creditsRemaining = $derived(Math.max(0, student.creditsTarget - student.creditsEarned));
-	const participationScore = $derived(Math.min(98, 50 + student.activityCount * 2));
+	// Share of this student's submissions that have been verified. The tile used to
+	// read `Math.min(98, 50 + activityCount * 2)`, which handed a student who had
+	// done nothing at all a 50% "participation score".
+	const participationScore = $derived(
+		student.certificates > 0
+			? Math.round(
+					((student.certificates - student.pendingCertificates) / student.certificates) * 100
+				)
+			: 0
+	);
+
+	const lastActivityLabel = $derived.by(() => {
+		if (!lastActivityAt) return 'No activity yet';
+		const parsed = new Date(lastActivityAt);
+		return Number.isNaN(parsed.getTime())
+			? 'No activity yet'
+			: parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+	});
+
+	// Quick Insights asserted "Excellent Participation Rate", "Top 10% in Assigned
+	// Batch" and "Consistent Activity Submission" for every student on every batch.
+	const rankPercentile = $derived(
+		cohortSize > 0 ? Math.max(1, Math.round((rank / cohortSize) * 100)) : 0
+	);
 
 	// The student's own highest-credit verified activity. This panel previously
 	// showed a fixed "NPTEL Certification / 20 Credits" for every student.
@@ -1022,7 +1047,7 @@
 						<span class="block text-[9px] font-bold tracking-wider text-slate-400 uppercase"
 							>Last Activity Date</span
 						>
-						<span class="block text-sm font-bold text-slate-900">24 Jun 2025</span>
+						<span class="block text-sm font-bold text-slate-900">{lastActivityLabel}</span>
 					</div>
 				</div>
 			</div>
@@ -1048,17 +1073,27 @@
 					class="flex items-center gap-2.5 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
 				>
 					<span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
-					<p class="text-[11px] font-bold text-slate-700">Excellent Participation Rate</p>
+					<p class="text-[11px] font-bold text-slate-700">
+						{student.activityCount} Activities Enrolled
+					</p>
 				</div>
 				<div class="flex items-center gap-2.5 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
 					<span class="h-2 w-2 shrink-0 rounded-full bg-blue-500"></span>
-					<p class="text-[11px] font-bold text-slate-700">Top 10% in Assigned Batch</p>
+					<p class="text-[11px] font-bold text-slate-700">
+						{cohortSize > 0
+							? `Rank ${rank} of ${cohortSize} — top ${rankPercentile}% of the batch`
+							: 'Batch ranking unavailable'}
+					</p>
 				</div>
 				<div
 					class="flex items-center gap-2.5 rounded-lg border border-purple-100 bg-purple-50/60 p-3"
 				>
 					<span class="h-2 w-2 shrink-0 rounded-full bg-purple-500"></span>
-					<p class="text-[11px] font-bold text-slate-700">Consistent Activity Submission</p>
+					<p class="text-[11px] font-bold text-slate-700">
+						Last activity {lastActivityLabel === 'No activity yet'
+							? '—'
+							: `on ${lastActivityLabel}`}
+					</p>
 				</div>
 
 				<div class="mt-auto pt-2">

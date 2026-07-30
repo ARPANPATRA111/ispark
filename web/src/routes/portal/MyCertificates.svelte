@@ -396,7 +396,8 @@
 		<span
 			class="bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded"
 		>
-			8 records
+			{certificates.length}
+			{certificates.length === 1 ? 'record' : 'records'}
 		</span>
 	</div>
 

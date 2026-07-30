@@ -15,6 +15,7 @@
 		submittedOn: string;
 		status: CertStatus;
 		priority: boolean;
+		reviewedAt: string | null;
 		relatedActivity: string;
 		creditsRequested: number;
 		remarks: string;
@@ -30,6 +31,18 @@
 		status: CertStatus;
 		credits: number;
 		description?: string;
+		reviewed_at?: string | null;
+	}
+
+	// A submission is flagged once it has sat in the queue longer than this. There
+	// is no priority field in the backend — this row used to be hardcoded `false`,
+	// so the "High Priority" tab could never match anything.
+	const OVERDUE_DAYS = 7;
+
+	function daysSince(value: string): number {
+		const parsed = new Date(value).getTime();
+		if (Number.isNaN(parsed)) return 0;
+		return (Date.now() - parsed) / 86_400_000;
 	}
 
 	let certificates = $state<Certificate[]>([]);
@@ -56,7 +69,8 @@
 							year: 'numeric'
 						}),
 						status: c.status,
-						priority: false,
+						priority: c.status === 'Pending' && daysSince(c.created_at) > OVERDUE_DAYS,
+						reviewedAt: c.reviewed_at ?? null,
 						relatedActivity: c.activity_name,
 						creditsRequested: c.credits,
 						remarks: c.description || ''
@@ -72,6 +86,21 @@
 	const pendingCount = $derived(certificates.filter((c) => c.status === 'Pending').length);
 	const approvedCount = $derived(certificates.filter((c) => c.status === 'Approved').length);
 	const rejectedCount = $derived(certificates.filter((c) => c.status === 'Rejected').length);
+	// "This month" now means this month. The card counted every approval ever made
+	// and captioned it with a fixed "+8 this week".
+	const approvedThisMonth = $derived(
+		certificates.filter((c) => {
+			if (c.status !== 'Approved' || !c.reviewedAt) return false;
+			const reviewed = new Date(c.reviewedAt);
+			const now = new Date();
+			return reviewed.getFullYear() === now.getFullYear() && reviewed.getMonth() === now.getMonth();
+		}).length
+	);
+	const approvedThisWeek = $derived(
+		certificates.filter(
+			(c) => c.status === 'Approved' && c.reviewedAt && daysSince(c.reviewedAt) <= 7
+		).length
+	);
 	const verificationRate = $derived(
 		approvedCount + rejectedCount === 0
 			? 0
@@ -79,8 +108,8 @@
 	);
 
 	// ── Queue: filters + pagination ──────────────────────────────────────────────
-	type QueueFilter = 'All' | 'Pending' | 'Approved' | 'Rejected' | 'High Priority';
-	const filterTabs: QueueFilter[] = ['All', 'Pending', 'Approved', 'Rejected', 'High Priority'];
+	type QueueFilter = 'All' | 'Pending' | 'Approved' | 'Rejected' | 'Overdue';
+	const filterTabs: QueueFilter[] = ['All', 'Pending', 'Approved', 'Rejected', 'Overdue'];
 
 	let activeFilter = $state<QueueFilter>('All');
 	let searchQuery = $state('');
@@ -98,7 +127,7 @@
 			const matchFilter =
 				activeFilter === 'All'
 					? true
-					: activeFilter === 'High Priority'
+					: activeFilter === 'Overdue'
 						? c.priority
 						: c.status === activeFilter;
 			return matchSearch && matchFilter;
@@ -385,7 +414,7 @@
 		class="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-200"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-2xl font-bold font-serif text-slate-900">{approvedCount}</span>
+			<span class="text-2xl font-bold font-serif text-slate-900">{approvedThisMonth}</span>
 			<div class="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -405,7 +434,9 @@
 		</div>
 		<div class="mt-4">
 			<h3 class="text-xs font-bold text-slate-800 tracking-wide">Approved This Month</h3>
-			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">+8 this week</p>
+			<p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
+				+{approvedThisWeek} this week
+			</p>
 		</div>
 	</div>
 
@@ -578,7 +609,7 @@
 									{#if cert.priority}
 										<span
 											class="w-1.5 h-1.5 rounded-full bg-[#881B1B] shrink-0"
-											title="High priority"
+											title="Pending for over {OVERDUE_DAYS} days"
 										></span>
 									{/if}
 									<div>

@@ -115,6 +115,24 @@
 		Math.min(Math.round((stats.credits_earned / targetCredits) * 100), 100)
 	);
 	let remainingCredits = $derived(Math.max(targetCredits - stats.credits_earned, 0));
+	// Axis ticks follow the configured target instead of a fixed 0/50/100/150/200.
+	let creditAxisLabels = $derived(
+		[0, 0.25, 0.5, 0.75, 1].map((fraction) => Math.round(targetCredits * fraction))
+	);
+	// The encouragement box congratulated every student on "excellent progress",
+	// including one sitting at zero credits.
+	let progressMessage = $derived.by(() => {
+		if (remainingCredits === 0) {
+			return `You have met the ${targetCredits}-credit requirement. Anything you add from here is a bonus.`;
+		}
+		if (stats.credits_earned === 0) {
+			return `You have not earned any extracurricular credits yet. Enrol in an activity to start working towards the ${targetCredits} you need.`;
+		}
+		if (percentComplete >= 50) {
+			return `You are ${percentComplete}% of the way to the requirement — only ${remainingCredits} more credits to go.`;
+		}
+		return `You have earned ${stats.credits_earned} of the ${targetCredits} credits required. ${remainingCredits} to go.`;
+	});
 	let approvedPct = $derived(
 		stats.certificates_uploaded > 0
 			? Math.round((stats.approved_certificates / stats.certificates_uploaded) * 100)
@@ -974,7 +992,7 @@
 									Credits Earned
 								</h3>
 								<p class="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-wider">
-									Out of 200 required
+									Out of {targetCredits} required
 								</p>
 							</div>
 						</div>
@@ -1068,7 +1086,7 @@
 										>Credits Earned</span
 									>
 									<span class="text-xl text-slate-300 font-light mx-1">/</span>
-									<span class="text-lg font-bold text-slate-500">200</span>
+									<span class="text-lg font-bold text-slate-500">{targetCredits}</span>
 									<span class="text-[10px] font-bold text-slate-405 uppercase tracking-widest"
 										>Required</span
 									>
@@ -1096,19 +1114,16 @@
 								<div
 									class="flex justify-between text-[10px] font-bold text-slate-405 font-sans px-1"
 								>
-									<span>0</span>
-									<span>50</span>
-									<span>100</span>
-									<span>150</span>
-									<span>200</span>
+									{#each creditAxisLabels as label, index (index)}
+										<span>{label}</span>
+									{/each}
 								</div>
 							</div>
 
 							<!-- Academic Quote Box -->
 							<blockquote class="bg-[#881B1B]/5 border-l-[3.5px] border-[#881B1B] p-4 rounded-r-md">
 								<p class="text-xs italic text-slate-700 leading-relaxed font-serif">
-									"You're making excellent progress toward your extracurricular goals. Keep it up —
-									only {remainingCredits} more credits to go!"
+									{progressMessage}
 								</p>
 							</blockquote>
 						</div>

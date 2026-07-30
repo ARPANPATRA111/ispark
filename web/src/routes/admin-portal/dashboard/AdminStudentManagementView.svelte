@@ -87,6 +87,10 @@
 	// ── State Variables ────────────────────────────────────────────────────────
 	let allStudents = $state<Student[]>([]);
 
+	// Graduation requirement, sent by the API from the platform setting. Every
+	// progress bar in this view used to assume a fixed 200.
+	let targetCredits = $state(200);
+
 	function mapBackendStudent(s: BackendStudent): Student {
 		return {
 			id: s.roll_no ?? '',
@@ -95,7 +99,7 @@
 			department: s.course_name ?? '',
 			semester: s.semester ?? 0,
 			creditsEarned: s.credits_earned ?? 0,
-			creditsTarget: 200,
+			creditsTarget: targetCredits,
 			certificates: s.total_certificates ?? 0,
 			pendingCertificates: s.pending_certificates ?? 0,
 			activityCount: s.activity_count ?? 0,
@@ -117,6 +121,7 @@
 
 			const data = await response.json();
 
+			if (data.target_credits) targetCredits = data.target_credits;
 			allStudents = data.students.map(mapBackendStudent);
 		} catch {
 			triggerToast('Failed to load student data', 'danger');
@@ -133,6 +138,17 @@
 		allStudents.length > 0
 			? Math.round(allStudents.reduce((sum, s) => sum + s.creditsEarned, 0) / allStudents.length)
 			: 0
+	);
+	const avgCreditsPercent = $derived(
+		targetCredits > 0 ? Math.round((avgCredits / targetCredits) * 100) : 0
+	);
+	// Quick Insights used to show a fixed 4 and 3 here regardless of the roster.
+	const belowCreditTarget = $derived(
+		allStudents.filter((s) => s.creditsEarned < s.creditsTarget / 2).length
+	);
+	const inactiveStudents = $derived(allStudents.filter((s) => s.status === 'Inactive').length);
+	const creditAxisLabels = $derived(
+		[0, 0.25, 0.5, 0.75, 1].map((fraction) => Math.round(targetCredits * fraction))
 	);
 
 	// Student Overview highlights
@@ -214,6 +230,9 @@
 	let activeStudent = $state<Student | null>(null);
 	let detailActivities = $state<HistoryActivity[]>([]);
 	let detailCertificates = $state<HistoryCertificate[]>([]);
+	// Timestamp of the student's most recent enrolment or submission, sent by the
+	// detail endpoint. The detail view printed a fixed "24 Jun 2025" without it.
+	let detailLastActivity = $state<string | null>(null);
 	let isModalOpen = $state(false);
 
 	async function openStudentModal(student: Student) {
@@ -227,6 +246,7 @@
 				const data = await res.json();
 				const detail: BackendStudent = data.student;
 				activeStudent = mapBackendStudent(detail);
+				detailLastActivity = data.last_activity_at ?? null;
 				detailCertificates = (detail.certificates ?? []).map((cert) => ({
 					id: cert.id,
 					name: cert.activity_name,
@@ -407,6 +427,7 @@
 		cohortSize={totalStudents}
 		activities={detailActivities}
 		certificates={detailCertificates}
+		lastActivityAt={detailLastActivity}
 		onBack={closeStudentDetail}
 		onToast={triggerToast}
 	/>
@@ -439,7 +460,7 @@
 			<div class="mt-4">
 				<h3 class="text-xs font-bold tracking-wide text-slate-800">Total Students</h3>
 				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-					+2 this semester
+					Across your assigned batch
 				</p>
 			</div>
 		</div>
@@ -501,7 +522,7 @@
 			<div class="mt-4">
 				<h3 class="text-xs font-bold tracking-wide text-slate-800">Pending Certificate Reviews</h3>
 				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-					3 marked urgent
+					{pendingCertReviews > 0 ? 'Awaiting your review' : 'All caught up'}
 				</p>
 			</div>
 		</div>
@@ -532,7 +553,7 @@
 			<div class="mt-4">
 				<h3 class="text-xs font-bold tracking-wide text-slate-800">Average Credits Earned</h3>
 				<p class="mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-					57.5% avg from last batch
+					{avgCreditsPercent}% of the {targetCredits} target
 				</p>
 			</div>
 		</div>
@@ -761,12 +782,14 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Review credit target</p>
-							<p class="text-[9px] font-semibold text-slate-400">Below threshold</p>
+							<p class="text-[9px] font-semibold text-slate-400">
+								Below {Math.round(targetCredits / 2)} credits
+							</p>
 						</div>
 					</div>
 					<span
 						class="rounded-md border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-extrabold text-blue-600"
-						>4</span
+						>{belowCreditTarget}</span
 					>
 				</div>
 
@@ -795,12 +818,12 @@
 						</div>
 						<div>
 							<p class="text-[11px] font-bold text-slate-700">Inactive students</p>
-							<p class="text-[9px] font-semibold text-slate-400">30 days</p>
+							<p class="text-[9px] font-semibold text-slate-400">No activity recorded</p>
 						</div>
 					</div>
 					<span
 						class="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600"
-						>3</span
+						>{inactiveStudents}</span
 					>
 				</div>
 
@@ -1268,11 +1291,9 @@
 						></div>
 					</div>
 					<div class="flex justify-between px-0.5 text-[9px] font-bold text-slate-400">
-						<span>0</span>
-						<span>50</span>
-						<span>100</span>
-						<span>150</span>
-						<span>200 (Target)</span>
+						{#each creditAxisLabels as label, index (index)}
+							<span>{label}{index === creditAxisLabels.length - 1 ? ' (Target)' : ''}</span>
+						{/each}
 					</div>
 				</div>
 			</div>

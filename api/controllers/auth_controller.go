@@ -398,6 +398,15 @@ func Login(c *fiber.Ctx) error {
 		Path:     "/",
 	})
 
+	// Stamp the sign-in so the profile's "Last Login" row reports something real.
+	// A failure here must not fail an otherwise successful login.
+	signedInAt := time.Now()
+	if err := config.DB.Model(&models.Student{}).
+		Where("roll_no = ?", student.RollNo).
+		Update("last_login_at", signedInAt).Error; err != nil {
+		log.Printf("Error recording last login for %s: %v", student.RollNo, err)
+	}
+
 	return c.JSON(fiber.Map{
 		"message":      "Logged in successfully",
 		"access_token": accessToken,
@@ -621,6 +630,8 @@ func GetProfile(c *fiber.Ctx) error {
 			"gender":        student.Gender,
 			"enrollment_no": student.EnrollmentNo,
 			"is_verified":   student.IsVerified,
+			"status":        student.Status,
+			"last_login_at": student.LastLoginAt,
 			"created_at":    student.CreatedAt,
 			"updated_at":    student.UpdatedAt,
 		},

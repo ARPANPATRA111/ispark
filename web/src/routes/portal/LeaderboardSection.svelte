@@ -196,8 +196,19 @@
 		}
 	);
 
-	// Derived Rahul Verma (YOU) credits to show dynamic Recognition Levels
+	// The signed-in student's own credits, used to unlock the Recognition Levels.
 	let currentUserCredits = $derived(activeStudents.find((s) => s.isSelf)?.credits || 0);
+
+	// Share of the leaderboard that has reached a threshold. The four tiers below
+	// shipped with fixed "Top 1% / 5% / 10% / 25%" captions, which were assertions
+	// about the cohort that nothing had measured.
+	function shareAtOrAbove(credits: number): string {
+		if (activeStudents.length === 0) return 'No data yet';
+		const reached = activeStudents.filter((s) => s.credits >= credits).length;
+		if (reached === 0) return 'Nobody has reached this yet';
+		const percent = Math.max(1, Math.round((reached / activeStudents.length) * 100));
+		return `${reached} of ${activeStudents.length} students (${percent}%)`;
+	}
 
 	// Derived state for the active champions from API
 	let activeChampions = $derived.by<Champion[]>(() => {
@@ -242,7 +253,7 @@
 		{
 			name: 'Top Performer',
 			creditsRequired: 140,
-			percentile: 'Top 1%',
+			percentile: shareAtOrAbove(140),
 			icon: 'star',
 			theme: 'gold',
 			unlocked: currentUserCredits >= 140
@@ -250,7 +261,7 @@
 		{
 			name: 'Outstanding Contributor',
 			creditsRequired: 100,
-			percentile: 'Top 5%',
+			percentile: shareAtOrAbove(100),
 			icon: 'check',
 			theme: 'rose',
 			unlocked: currentUserCredits >= 100
@@ -258,7 +269,7 @@
 		{
 			name: 'Academic Achiever',
 			creditsRequired: 80,
-			percentile: 'Top 10%',
+			percentile: shareAtOrAbove(80),
 			icon: 'check',
 			theme: 'blue',
 			unlocked: currentUserCredits >= 80
@@ -266,7 +277,7 @@
 		{
 			name: 'Active Participant',
 			creditsRequired: 50,
-			percentile: 'Top 25%',
+			percentile: shareAtOrAbove(50),
 			icon: 'check',
 			theme: 'slate',
 			unlocked: currentUserCredits >= 50
