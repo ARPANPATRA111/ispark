@@ -1,10 +1,12 @@
 name: CI
 
 on:
+  # dev is the branch contributors test and raise pull requests against, so it
+  # needs the same checks as main rather than none at all.
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
